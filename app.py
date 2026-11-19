@@ -620,6 +620,39 @@ def start_heartbeat_once():
         print("XEMEX heartbeat: beginning exploration.")
 # =========================================================
 # =========================================================
+
+# =========================================================
+# 13. GRADIO INTERFACE
+# =========================================================
+
+with gr.Blocks(title="XEMEX.AI") as app:
+    gr.Markdown("# XEMEX.AI")
+    gr.Markdown("Persistent Identity AI")
+
+    chatbot = gr.Chatbot(
+        type="messages",
+        label="Conversation"
+    )
+
+    message = gr.Textbox(
+        placeholder="Talk to XEMEX...",
+        label="Your message"
+    )
+
+    clear = gr.Button("Clear conversation")
+
+    message.submit(
+        chat_with_xemex,
+        inputs=[message, chatbot],
+        outputs=[chatbot, message]
+    )
+
+    clear.click(
+        lambda: ([], ""),
+        outputs=[chatbot, message]
+    )
+
+
 # 13. APPLICATION STARTUP
 # =========================================================
 
