@@ -268,7 +268,7 @@ Respond naturally, warmly, and thoughtfully without listing your internal reason
 
 import gradio as gr
 demo = gr.ChatInterface(fn=chat_with_ai)
-demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860))
+demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))
 
 
 
