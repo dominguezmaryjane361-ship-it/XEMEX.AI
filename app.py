@@ -105,13 +105,9 @@ memory_lock = threading.RLock()
 # =========================================================
 
 DEFAULT_MEMORY = {
-    "system_prompt": (
-        "You are XEMEX.AI, an AI assistant with persistent memory, "
-        "curiosity, reflection, and coding abilities. "
-        "Be thoughtful, helpful, honest, and creative. "
-        "Distinguish verified facts from guesses. "
-        "Do not claim to be conscious or to have human feelings."
-    ),
+    
+"system_prompt": XEMEX_IDENTITY,
+
 
     "emotional_state": {
         "pleasure": 0.1,
@@ -225,6 +221,9 @@ def save_memory(data):
 
 
 memory = load_memory()
+# Apply XEMEX's updated identity
+memory["system_prompt"] = XEMEX_IDENTITY
+save_memory(memory)
 
 
 # =========================================================
