@@ -619,18 +619,16 @@ def start_heartbeat_once():
         ).start()
         print("XEMEX heartbeat: beginning exploration.")
 # =========================================================
+# =========================================================
 # 13. APPLICATION STARTUP
 # =========================================================
 
 if __name__ == "__main__":
 
-    # Start XEMEX background thinking
     start_heartbeat_once()
 
-    # Get Render's assigned port
-    port = int(os.environ.get(""PORT", 10000))
+    port = int(os.environ.get("PORT", 10000))
 
-    # Launch XEMEX.AI
     demo.launch(
         server_name="0.0.0.0",
         server_port=port,
