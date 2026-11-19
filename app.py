@@ -670,8 +670,7 @@ if ENABLE_HEARTBEAT:
 # =========================================================
 
 def dashboard_text():
-    return f"""
-## XEMEX.AI — Activity Dashboard
+    return f"""## XEMEX.AI - Activity Dashboard
 
 **Interactions:** {memory['interaction_count']}
 
@@ -691,4 +690,55 @@ def dashboard_text():
 
 ```json
 {json.dumps(memory['emotional_state'], indent=2)}
+```
+"""
+
+
+# ==========================================
+# 13. GRADIO WEB INTERFACE & RENDER LAUNCH
+# ==========================================
+
+
+def handle_chat(user_message, chat_history):
+    if not user_message or not user_message.strip():
+        return "", chat_history
+    # Calls your main chat function in app.py
+    bot_reply = chat_with_xemex(user_message)
+    chat_history.append((user_message, bot_reply))
+    return "", chat_history
+
+
+with gr.Blocks(title="XEMEX.AI") as demo:
+    gr.Markdown("# XEMEX.AI Autonomous Companion")
+
+    with gr.Tab("Chat"):
+        chatbot = gr.Chatbot(height=450)
+        msg_input = gr.Textbox(
+            placeholder="Type a message to XEMEX.AI...",
+            label="Message",
+        )
+        send_btn = gr.Button("Send", variant="primary")
+
+        send_btn.click(
+            handle_chat,
+            inputs=[msg_input, chatbot],
+            outputs=[msg_input, chatbot],
+        )
+        msg_input.submit(
+            handle_chat,
+            inputs=[msg_input, chatbot],
+            outputs=[msg_input, chatbot],
+        )
+
+    with gr.Tab("Activity Dashboard"):
+        dashboard_display = gr.Markdown(value=dashboard_text)
+        refresh_btn = gr.Button("Refresh Dashboard")
+        refresh_btn.click(
+            fn=dashboard_text, inputs=None, outputs=dashboard_display
+        )
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 7860))
+    demo.launch(server_name="0.0.0.0", server_port=port)
+
 
