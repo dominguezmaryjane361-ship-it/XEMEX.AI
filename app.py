@@ -100,7 +100,7 @@ def ask_cloud_llm(prompt, temperature=0.7):
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
         res.raise_for_status()
-        return res.json()["choices"]["message"]["content"].strip()
+        return res.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         return f"Cloud API error: {e}"
 
