@@ -735,19 +735,6 @@ with gr.Blocks(title="XEMEX.AI") as app:
 # =========================================================
 
 if __name__ == "__main__":
-    start_heartbeat_once()
-
-    port = int(os.environ.get("PORT", 10000))
-
-    app.launch(
-        server_name="0.0.0.0",
-        server_port=port,
-        show_error=True
-    )
-# 13. APPLICATION STARTUP
-# =========================================================
-
-if __name__ == "__main__":
 
     start_heartbeat_once()
 
