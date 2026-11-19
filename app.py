@@ -13,7 +13,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "PASTE_YOUR_GROQ_API_KEY_HERE")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "PASTE_YOUR_SUPABASE_URL_HERE")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "PASTE_YOUR_SUPABASE_KEY_HERE")
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-20b"
 LOCAL_BACKUP_FILE = "ai_memory_backup.json"
 HEARTBEAT_INTERVAL_SECONDS = 3600  # Wakes up every 1 hour (3600s) to evolve
 
