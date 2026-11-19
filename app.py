@@ -394,6 +394,8 @@ def think_independently(topic=None):
             "timestamp": timestamp,
             "topic": topic,
             "exploration": result,
+"memories": [],
+"memory_summary": "",
         })
         memory["thoughts"] = memory["thoughts"][-40:]
         memory["learned_knowledge"].append(f"{timestamp} | {topic}: {result}")
