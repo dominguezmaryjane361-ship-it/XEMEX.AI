@@ -622,6 +622,8 @@ def start_heartbeat_once():
 # =========================================================
 
 # =========================================================
+
+# =========================================================
 # 13. GRADIO INTERFACE
 # =========================================================
 
@@ -629,12 +631,9 @@ with gr.Blocks(title="XEMEX.AI") as app:
     gr.Markdown("# XEMEX.AI")
     gr.Markdown("Persistent Identity AI")
 
-  
-chatbot = gr.Chatbot(
-    label="Conversation"
-)
-
-  
+    chatbot = gr.Chatbot(
+        label="Conversation"
+    )
 
     message = gr.Textbox(
         placeholder="Talk to XEMEX...",
@@ -655,6 +654,20 @@ chatbot = gr.Chatbot(
     )
 
 
+# =========================================================
+# 14. APPLICATION STARTUP
+# =========================================================
+
+if __name__ == "__main__":
+    start_heartbeat_once()
+
+    port = int(os.environ.get("PORT", 10000))
+
+    app.launch(
+        server_name="0.0.0.0",
+        server_port=port,
+        show_error=True
+    )
 # 13. APPLICATION STARTUP
 # =========================================================
 
