@@ -1,4 +1,3 @@
-```text
 gradio
 requests
 supabase
