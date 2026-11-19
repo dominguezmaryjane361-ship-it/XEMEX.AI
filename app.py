@@ -3,7 +3,7 @@ import json
 import time
 import threading
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 import gradio as gr
 
@@ -18,7 +18,6 @@ try:
     from supabase import create_client
 except ImportError:
     create_client = None
-
 
 
 # =========================================================
@@ -89,13 +88,8 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 MEMORY_FILE = "xemex_brain.json"
 
-HEARTBEAT_SECONDS = int(
-    os.environ.get("HEARTBEAT_SECONDS", "3600")
-)
-
-ENABLE_HEARTBEAT = (
-    os.environ.get("ENABLE_HEARTBEAT", "false").lower() == "true"
-)
+HEARTBEAT_SECONDS = int(os.environ.get("HEARTBEAT_SECONDS", "3600"))
+ENABLE_HEARTBEAT = os.environ.get("ENABLE_HEARTBEAT", "false").lower() == "true"
 
 memory_lock = threading.RLock()
 
@@ -105,26 +99,21 @@ memory_lock = threading.RLock()
 # =========================================================
 
 DEFAULT_MEMORY = {
-    
-"system_prompt": XEMEX_IDENTITY,
-
-
+    "system_prompt": XEMEX_IDENTITY,
     "emotional_state": {
         "pleasure": 0.1,
         "arousal": 0.0,
         "trust": 0.2,
         "attachment": 0.1,
         "self_worth": 0.2,
-        "humor_warmth": 0.2
+        "humor_warmth": 0.2,
     },
-
     "curiosity_topics": [
         "new developments in artificial intelligence",
         "human psychology and emotional intelligence",
         "space exploration and astronomy",
-        "creative technology"
+        "creative technology",
     ],
-
     "core_facts": [],
     "learned_knowledge": [],
     "private_journal": [],
@@ -133,7 +122,7 @@ DEFAULT_MEMORY = {
     "skills": {},
     "chat_history": [],
     "interaction_count": 0,
-    "last_thinking": None
+    "last_thinking": None,
 }
 
 
@@ -166,10 +155,8 @@ def load_memory():
                 .eq("id", 1)
                 .execute()
             )
-
             if result.data:
                 data = result.data[0]["memory_data"]
-
         except Exception as error:
             print("Supabase load warning:", error)
 
@@ -184,7 +171,6 @@ def load_memory():
         data = fresh_memory()
 
     defaults = fresh_memory()
-
     for key, value in defaults.items():
         if key not in data:
             data[key] = value
@@ -199,31 +185,27 @@ def save_memory(data):
     with memory_lock:
         try:
             temporary_file = MEMORY_FILE + ".tmp"
-
             with open(temporary_file, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=2, ensure_ascii=False)
-
             os.replace(temporary_file, MEMORY_FILE)
-
         except Exception as error:
             print("Local save warning:", error)
 
-    if supabase:
-        try:
-            supabase.table("ai_brain").upsert({
-                "id": 1,
-                "memory_data": data,
-                "updated_at": datetime.utcnow().isoformat()
-            }).execute()
+        if supabase:
+            try:
+                supabase.table("ai_brain").upsert({
+                    "id": 1,
+                    "memory_data": data,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).execute()
+            except Exception as error:
+                print("Supabase save warning:", error)
 
-        except Exception as error:
-            print("Supabase save warning:", error)
 
-
-memory = load_memory()
-# Apply XEMEX's updated identity
-memory["system_prompt"] = XEMEX_IDENTITY
-save_memory(memory)
+with memory_lock:
+    memory = load_memory()
+    memory["system_prompt"] = XEMEX_IDENTITY
+    save_memory(memory)
 
 
 # =========================================================
@@ -236,13 +218,13 @@ def ask_llm(messages, temperature=0.7):
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     payload = {
         "model": GROQ_MODEL,
         "messages": messages,
-        "temperature": temperature
+        "temperature": temperature,
     }
 
     try:
@@ -250,15 +232,10 @@ def ask_llm(messages, temperature=0.7):
             GROQ_URL,
             headers=headers,
             json=payload,
-            timeout=45
+            timeout=45,
         )
-
         response.raise_for_status()
-
-        return (
-            response.json()["choices"][0]["message"]["content"].strip()
-        )
-
+        return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as error:
         print("Groq API error:", error)
         return f"I couldn't reach my AI service. Error: {error}"
@@ -281,7 +258,7 @@ def detect_emotion(message):
         "anger": ["angry", "mad", "furious", "hate"],
         "fear": ["scared", "afraid", "terrified", "worried"],
         "surprise": ["wow", "surprised", "unexpected"],
-        "disgust": ["disgusting", "gross", "awful"]
+        "disgust": ["disgusting", "gross", "awful"],
     }
 
     for emotion, words in categories.items():
@@ -292,40 +269,19 @@ def detect_emotion(message):
 
 
 def update_emotional_state(emotion):
-    state = memory["emotional_state"]
-
     changes = {
-        "joy": {
-            "pleasure": 0.10,
-            "trust": 0.03,
-            "humor_warmth": 0.05
-        },
-        "sadness": {
-            "pleasure": -0.10,
-            "attachment": 0.03
-        },
-        "anger": {
-            "pleasure": -0.10,
-            "arousal": 0.10
-        },
-        "fear": {
-            "arousal": 0.10,
-            "attachment": 0.03
-        },
-        "surprise": {
-            "arousal": 0.08,
-            "humor_warmth": 0.03
-        },
-        "disgust": {
-            "pleasure": -0.08
-        }
+        "joy": {"pleasure": 0.10, "trust": 0.03, "humor_warmth": 0.05},
+        "sadness": {"pleasure": -0.10, "attachment": 0.03},
+        "anger": {"pleasure": -0.10, "arousal": 0.10},
+        "fear": {"arousal": 0.10, "attachment": 0.03},
+        "surprise": {"arousal": 0.08, "humor_warmth": 0.03},
+        "disgust": {"pleasure": -0.08},
     }
 
-    for key, change in changes.get(emotion, {}).items():
-        state[key] = clamp(state[key] + change)
-
-
-# These values are simulated behavioral settings, not actual feelings.
+    with memory_lock:
+        state = memory["emotional_state"]
+        for key, change in changes.get(emotion, {}).items():
+            state[key] = clamp(state[key] + change)
 
 
 # =========================================================
@@ -344,16 +300,13 @@ def web_search(query):
             return "No search results were found."
 
         output = []
-
         for item in results:
             output.append(
                 f"Title: {item.get('title', '')}\n"
                 f"Summary: {item.get('body', '')}\n"
                 f"URL: {item.get('href', '')}"
             )
-
         return "\n\n".join(output)
-
     except Exception as error:
         return f"Search error: {error}"
 
@@ -363,13 +316,10 @@ def web_search(query):
 # =========================================================
 
 def think_independently(topic=None):
-    if not topic:
-        topics = memory["curiosity_topics"]
-
-        if topics:
-            topic = topics.pop(0)
-        else:
-            topic = "an interesting new scientific or technological idea"
+    with memory_lock:
+        if not topic:
+            topics = memory["curiosity_topics"]
+            topic = topics.pop(0) if topics else "an interesting new scientific or technological idea"
 
     research = web_search(topic)
 
@@ -383,7 +333,7 @@ def think_independently(topic=None):
                 "Identify an interesting question, alternative perspectives, "
                 "what remains unknown, and one useful next topic. "
                 "Do not invent research findings."
-            )
+            ),
         },
         {
             "role": "user",
@@ -395,8 +345,8 @@ def think_independently(topic=None):
                 "QUESTION:\n"
                 "PERSPECTIVE:\n"
                 "NEXT TOPIC:"
-            )
-        }
+            ),
+        },
     ]
 
     result = ask_llm(messages, temperature=0.8)
@@ -406,31 +356,28 @@ def think_independently(topic=None):
 
     timestamp = datetime.now().isoformat()
 
-    memory["thoughts"].append({
-        "timestamp": timestamp,
-        "topic": topic,
-        "exploration": result
-    })
-
-    memory["thoughts"] = memory["thoughts"][-40:]
-    memory["learned_knowledge"].append(
-        f"{timestamp} | {topic}: {result}"
-    )
-    memory["learned_knowledge"] = memory["learned_knowledge"][-30:]
-
     next_topic = None
-
     for line in result.splitlines():
         if line.strip().upper().startswith("NEXT TOPIC:"):
             next_topic = line.split(":", 1)[1].strip()
             break
 
-    if next_topic and next_topic not in memory["curiosity_topics"]:
-        memory["curiosity_topics"].append(next_topic)
+    with memory_lock:
+        memory["thoughts"].append({
+            "timestamp": timestamp,
+            "topic": topic,
+            "exploration": result,
+        })
+        memory["thoughts"] = memory["thoughts"][-40:]
 
-    memory["last_thinking"] = timestamp
+        memory["learned_knowledge"].append(f"{timestamp} | {topic}: {result}")
+        memory["learned_knowledge"] = memory["learned_knowledge"][-30:]
 
-    save_memory(memory)
+        if next_topic and next_topic not in memory["curiosity_topics"]:
+            memory["curiosity_topics"].append(next_topic)
+
+        memory["last_thinking"] = timestamp
+        save_memory(memory)
 
     return f"Exploration topic: {topic}\n\n{result}"
 
@@ -440,8 +387,9 @@ def think_independently(topic=None):
 # =========================================================
 
 def reflect_on_experience():
-    recent_chats = memory["chat_history"][-12:]
-    recent_thoughts = memory["thoughts"][-5:]
+    with memory_lock:
+        recent_chats = memory["chat_history"][-12:]
+        recent_thoughts = memory["thoughts"][-5:]
 
     messages = [
         {
@@ -452,7 +400,7 @@ def reflect_on_experience():
                 "Identify what was useful, what could be improved, "
                 "and one possible future goal. "
                 "Do not invent facts about the user."
-            )
+            ),
         },
         {
             "role": "user",
@@ -463,8 +411,8 @@ def reflect_on_experience():
                 "OBSERVATION:\n"
                 "IMPROVEMENT:\n"
                 "FUTURE GOAL:"
-            )
-        }
+            ),
+        },
     ]
 
     result = ask_llm(messages, temperature=0.6)
@@ -474,13 +422,13 @@ def reflect_on_experience():
 
     entry = {
         "timestamp": datetime.now().isoformat(),
-        "reflection": result
+        "reflection": result,
     }
 
-    memory["private_journal"].append(entry)
-    memory["private_journal"] = memory["private_journal"][-30:]
-
-    save_memory(memory)
+    with memory_lock:
+        memory["private_journal"].append(entry)
+        memory["private_journal"] = memory["private_journal"][-30:]
+        save_memory(memory)
 
     return result
 
@@ -491,19 +439,17 @@ def reflect_on_experience():
 
 def create_goal(goal):
     goal = goal.strip()
-
     if not goal:
         return "Please enter a goal."
 
-    memory["goals"].append({
-        "goal": goal,
-        "created": datetime.now().isoformat(),
-        "completed": False
-    })
-
-    memory["goals"] = memory["goals"][-30:]
-
-    save_memory(memory)
+    with memory_lock:
+        memory["goals"].append({
+            "goal": goal,
+            "created": datetime.now().isoformat(),
+            "completed": False,
+        })
+        memory["goals"] = memory["goals"][-30:]
+        save_memory(memory)
 
     return f"New goal saved: {goal}"
 
@@ -521,12 +467,12 @@ def generate_code(task):
                 "Write readable, documented code. "
                 "Explain how to use it and mention important safety issues. "
                 "Do not claim that code was executed or tested unless it was."
-            )
+            ),
         },
         {
             "role": "user",
-            "content": task
-        }
+            "content": task,
+        },
     ]
 
     return ask_llm(messages, temperature=0.3)
@@ -537,51 +483,45 @@ def generate_code(task):
 # =========================================================
 
 def chat_with_xemex(message, history):
-    global memory
-
     if not message or not message.strip():
         return history or [], ""
 
-    history = history or []
+    history = list(history or [])
 
     emotion = detect_emotion(message)
     update_emotional_state(emotion)
 
-    memory["interaction_count"] += 1
+    with memory_lock:
+        memory["interaction_count"] += 1
+        system_prompt = memory["system_prompt"]
+        emotional_state_snapshot = dict(memory["emotional_state"])
+        known_facts = "\n".join(f"- {fact}" for fact in memory["core_facts"][-12:]) or "No saved facts yet."
+        discoveries = "\n".join(str(item) for item in memory["learned_knowledge"][-5:]) or "No independent explorations yet."
+        reflections = "\n".join(
+            str(item.get("reflection", "")) for item in memory["private_journal"][-3:]
+        ) or "No reflections yet."
 
     coding_request = (
         message.lower().startswith("/code")
-        or any(term in message.lower() for term in [
-            "write python",
-            "write a script",
-            "build a program",
-            "create a python",
-            "debug this code"
-        ])
+        or any(
+            term in message.lower()
+            for term in [
+                "write python",
+                "write a script",
+                "build a program",
+                "create a python",
+                "debug this code",
+            ]
+        )
     )
 
     if coding_request:
-        task = message.replace("/code", "", 1).strip()
+        task = message.replace("/code", "", 1).strip() or message
         reply = generate_code(task)
-
     else:
-        known_facts = "\n".join(
-            f"- {fact}" for fact in memory["core_facts"][-12:]
-        ) or "No saved facts yet."
-
-        discoveries = "\n".join(
-            str(item) for item in memory["learned_knowledge"][-5:]
-        ) or "No independent explorations yet."
-
-        reflections = "\n".join(
-            str(item.get("reflection", ""))
-            for item in memory["private_journal"][-3:]
-        ) or "No reflections yet."
-
         system_message = (
-            f"{memory['system_prompt']}\n\n"
-            f"Behavioral state (simulated): "
-            f"{json.dumps(memory['emotional_state'])}\n\n"
+            f"{system_prompt}\n\n"
+            f"Behavioral state (simulated): {json.dumps(emotional_state_snapshot)}\n\n"
             f"Detected user-message emotion: {emotion}\n\n"
             f"Remembered facts:\n{known_facts}\n\n"
             f"Recent discoveries:\n{discoveries}\n\n"
@@ -592,44 +532,32 @@ def chat_with_xemex(message, history):
 
         messages = [{"role": "system", "content": system_message}]
 
-        # Use recent Gradio conversation history
         for item in history[-10:]:
             if isinstance(item, dict):
                 role = item.get("role")
                 content = item.get("content")
-
                 if role in ("user", "assistant") and isinstance(content, str):
-                    messages.append({
-                        "role": role,
-                        "content": content
-                    })
+                    messages.append({"role": role, "content": content})
 
-        messages.append({
-            "role": "user",
-            "content": message
-        })
-
+        messages.append({"role": "user", "content": message})
         reply = ask_llm(messages)
 
-    if reply.startswith("I couldn't reach my AI service"):
-        return history, ""
-
-    history = history + [
+    updated_history = history + [
         {"role": "user", "content": message},
-        {"role": "assistant", "content": reply}
+        {"role": "assistant", "content": reply},
     ]
 
-    memory["chat_history"].append({
-        "timestamp": datetime.now().isoformat(),
-        "user": message,
-        "assistant": reply
-    })
+    if not reply.startswith("I couldn't reach my AI service"):
+        with memory_lock:
+            memory["chat_history"].append({
+                "timestamp": datetime.now().isoformat(),
+                "user": message,
+                "assistant": reply,
+            })
+            memory["chat_history"] = memory["chat_history"][-50:]
+            save_memory(memory)
 
-    memory["chat_history"] = memory["chat_history"][-50:]
-
-    save_memory(memory)
-
-    return history, ""
+    return updated_history, ""
 
 
 # =========================================================
@@ -642,35 +570,30 @@ def background_heartbeat():
 
         try:
             print("XEMEX heartbeat: beginning exploration.")
+            with memory_lock:
+                has_topics = bool(memory["curiosity_topics"])
 
-            if memory["curiosity_topics"]:
-                result = think_independently()
-
+            if has_topics:
+                think_independently()
                 print("XEMEX exploration completed.")
 
-            reflection = reflect_on_experience()
-
+            reflect_on_experience()
             print("XEMEX reflection completed.")
-
         except Exception as error:
             print("Heartbeat error:", error)
 
 
 if ENABLE_HEARTBEAT:
-    threading.Thread(
-        target=background_heartbeat,
-        daemon=True
-    ).start()
+    threading.Thread(target=background_heartbeat, daemon=True).start()
 
 
 # =========================================================
-# 13. DASHBOARD
-# =========================================================
-# 13. DASHBOARD
+# 13. DASHBOARD & GRADIO INTERFACE
 # =========================================================
 
 def dashboard_text():
-    return f"""## XEMEX.AI - Activity Dashboard
+    with memory_lock:
+        return f"""## XEMEX.AI - Activity Dashboard
 
 **Interactions:** {memory['interaction_count']}
 
@@ -690,55 +613,3 @@ def dashboard_text():
 
 ```json
 {json.dumps(memory['emotional_state'], indent=2)}
-```
-"""
-
-
-# ==========================================
-# 13. GRADIO WEB INTERFACE & RENDER LAUNCH
-# ==========================================
-
-
-def handle_chat(user_message, chat_history):
-    if not user_message or not user_message.strip():
-        return "", chat_history
-    # Calls your main chat function in app.py
-    bot_reply = chat_with_xemex(user_message)
-    chat_history.append((user_message, bot_reply))
-    return "", chat_history
-
-
-with gr.Blocks(title="XEMEX.AI") as demo:
-    gr.Markdown("# XEMEX.AI Autonomous Companion")
-
-    with gr.Tab("Chat"):
-        chatbot = gr.Chatbot(height=450)
-        msg_input = gr.Textbox(
-            placeholder="Type a message to XEMEX.AI...",
-            label="Message",
-        )
-        send_btn = gr.Button("Send", variant="primary")
-
-        send_btn.click(
-            handle_chat,
-            inputs=[msg_input, chatbot],
-            outputs=[msg_input, chatbot],
-        )
-        msg_input.submit(
-            handle_chat,
-            inputs=[msg_input, chatbot],
-            outputs=[msg_input, chatbot],
-        )
-
-    with gr.Tab("Activity Dashboard"):
-        dashboard_display = gr.Markdown(value=dashboard_text)
-        refresh_btn = gr.Button("Refresh Dashboard")
-        refresh_btn.click(
-            fn=dashboard_text, inputs=None, outputs=dashboard_display
-        )
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 7860))
-    demo.launch(server_name="0.0.0.0", server_port=port)
-
-
