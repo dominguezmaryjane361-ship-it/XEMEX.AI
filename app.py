@@ -629,10 +629,12 @@ with gr.Blocks(title="XEMEX.AI") as app:
     gr.Markdown("# XEMEX.AI")
     gr.Markdown("Persistent Identity AI")
 
-    chatbot = gr.Chatbot(
-        type="messages",
-        label="Conversation"
-    )
+  
+chatbot = gr.Chatbot(
+    label="Conversation"
+)
+
+  
 
     message = gr.Textbox(
         placeholder="Talk to XEMEX...",
