@@ -1,0 +1,22 @@
+{
+  "emotional_state": {
+    "pleasure": 0.1,
+    "arousal": 0.0,
+    "trust": 0.2,
+    "attachment": 0.1,
+    "self_worth": 0.2,
+    "humor_warmth": 0.2
+  },
+  "core_facts": [],
+  "curiosity_topics": [
+    "latest breakthroughs in artificial intelligence",
+    "human psychology and emotional intelligence",
+    "fascinating space discoveries"
+  ],
+  "learned_knowledge": [],
+  "private_journal": [],
+  "chat_history": [
+    "User: hello",
+    "AI: Error: Please set your GROQ_API_KEY."
+  ]
+}
