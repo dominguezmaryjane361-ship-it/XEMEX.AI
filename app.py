@@ -87,7 +87,7 @@ def ask_cloud_llm(prompt, temperature=0.7):
     if not GROQ_API_KEY or "PASTE_YOUR" in GROQ_API_KEY:
         return "Error: Please set your GROQ_API_KEY."
     
-    url= "https:\\groq.com"
+    url= "https://groq.com"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
