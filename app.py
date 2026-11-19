@@ -617,4 +617,4 @@ def start_heartbeat_once():
             daemon=True,
             name="xemex-heartbeat",
         ).start()
-        print(f"XEMEX hear
+        print(f"XEMEX heartbeat enabled: every {HEARTBEAT_SECONDS} seconds.")
