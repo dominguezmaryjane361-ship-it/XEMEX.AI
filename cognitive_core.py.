@@ -1,0 +1,162 @@
+
+import json
+import os
+import uuid
+from datetime import datetime
+
+class XemexCognitiveCore:
+
+    def __init__(self, memory_file="xemex_cognition.json"):
+        self.memory_file = memory_file
+
+        self.identity = {
+            "name": "XEMEX.AI",
+            "purpose": "Learn, reason, assist and improve",
+            "version": "1.0"
+        }
+
+        self.state = {
+            "current_focus": None,
+            "goals": [],
+            "experiences": [],
+            "knowledge": [],
+            "reflections": [],
+            "curiosity": [],
+            "self_assessments": []
+        }
+
+        self.load_memory()
+
+    def load_memory(self):
+        if os.path.exists(self.memory_file):
+            try:
+                with open(self.memory_file, "r") as f:
+                    self.state.update(json.load(f))
+            except (ValueError, OSError):
+                print("Memory unavailable. Starting fresh.")
+
+    def save_memory(self):
+        temp_file = self.memory_file + ".tmp"
+
+        with open(temp_file, "w") as f:
+            json.dump(self.state, f, indent=2)
+
+        os.replace(temp_file, self.memory_file)
+
+    # Working memory
+    def focus(self, task):
+        self.state["current_focus"] = task
+        self.save_memory()
+
+    # Record experiences
+    def experience(self, event, outcome):
+        record = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.utcnow().isoformat(),
+            "event": event,
+            "outcome": outcome
+        }
+
+        self.state["experiences"].append(record)
+        self.state["experiences"] = self.state["experiences"][-100:]
+        self.save_memory()
+
+    # Self-monitoring
+    def evaluate(self, task, result, confidence):
+        assessment = {
+            "task": task,
+            "result": result,
+            "confidence": max(0, min(1, confidence)),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        self.state["self_assessments"].append(assessment)
+        self.save_memory()
+
+        return assessment
+
+    # Metacognitive reflection
+    def reflect(self, observation, improvement):
+        reflection = {
+            "observation": observation,
+            "improvement": improvement,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        self.state["reflections"].append(reflection)
+        self.state["reflections"] = self.state["reflections"][-50:]
+        self.save_memory()
+
+    # Goal management
+    def create_goal(self, goal):
+        self.state["goals"].append({
+            "id": str(uuid.uuid4()),
+            "goal": goal,
+            "status": "active",
+            "created": datetime.utcnow().isoformat()
+        })
+        self.save_memory()
+
+    # Curiosity engine
+    def ask_question(self, question):
+        self.state["curiosity"].append({
+            "question": question,
+            "created": datetime.utcnow().isoformat(),
+            "explored": False
+        })
+        self.save_memory()
+
+    # Knowledge acquisition
+    def learn(self, topic, information):
+        self.state["knowledge"].append({
+            "topic": topic,
+            "information": information,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        self.state["knowledge"] = self.state["knowledge"][-200:]
+        self.save_memory()
+
+    # Cognitive status
+    def status(self):
+        return {
+            "identity": self.identity,
+            "focus": self.state["current_focus"],
+            "active_goals": [
+                g for g in self.state["goals"]
+                if g["status"] == "active"
+            ],
+            "experiences": len(self.state["experiences"]),
+            "knowledge_entries": len(self.state["knowledge"]),
+            "reflections": len(self.state["reflections"]),
+            "open_questions": len(self.state["curiosity"])
+        }
+
+
+if __name__ == "__main__":
+    xemex = XemexCognitiveCore()
+
+    xemex.focus("Develop advanced reasoning")
+
+    xemex.experience(
+        "Completed a coding task",
+        "Code generated and tested"
+    )
+
+    xemex.evaluate(
+        "Coding task",
+        "Successful execution",
+        0.85
+    )
+
+    xemex.reflect(
+        "The solution worked",
+        "Improve error handling"
+    )
+
+    xemex.create_goal("Develop better reasoning capabilities")
+
+    xemex.ask_question(
+        "How can AI systems improve their reasoning?"
+    )
+
+    print(json.dumps(xemex.status(), indent=2))
