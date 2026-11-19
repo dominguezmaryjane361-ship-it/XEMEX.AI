@@ -1,18 +1,24 @@
 
-import json
 import os
+import json
 import uuid
-from datetime import datetime
+import threading
+import tempfile
+from datetime import datetime, timezone
+
 
 class XemexCognitiveCore:
 
+    VERSION = "2.0"
+
     def __init__(self, memory_file="xemex_cognition.json"):
         self.memory_file = memory_file
+        self.lock = threading.RLock()
 
         self.identity = {
             "name": "XEMEX.AI",
             "purpose": "Learn, reason, assist and improve",
-            "version": "1.0"
+            "version": self.VERSION
         }
 
         self.state = {
@@ -22,117 +28,574 @@ class XemexCognitiveCore:
             "knowledge": [],
             "reflections": [],
             "curiosity": [],
-            "self_assessments": []
+            "self_assessments": [],
+            "reasoning_log": []
         }
 
         self.load_memory()
 
+    # =========================================
+    # TIME AND IDENTIFIERS
+    # =========================================
+
+    def timestamp(self):
+        return datetime.now(timezone.utc).isoformat()
+
+    def new_id(self):
+        return str(uuid.uuid4())
+
+    # =========================================
+    # MEMORY MANAGEMENT
+    # =========================================
+
     def load_memory(self):
-        if os.path.exists(self.memory_file):
+        with self.lock:
+            if not os.path.exists(self.memory_file):
+                return
+
             try:
-                with open(self.memory_file, "r") as f:
-                    self.state.update(json.load(f))
-            except (ValueError, OSError):
-                print("Memory unavailable. Starting fresh.")
+                with open(self.memory_file, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+
+                if not isinstance(loaded, dict):
+                    raise ValueError("Invalid memory structure")
+
+                for key, default in self.state.items():
+                    value = loaded.get(key, default)
+
+                    if key == "current_focus":
+                        self.state[key] = value
+                    elif isinstance(default, list) and isinstance(value, list):
+                        self.state[key] = value
+
+            except (ValueError, OSError, TypeError) as error:
+                print(f"Memory unavailable: {error}")
+                print("Starting with fresh memory.")
 
     def save_memory(self):
-        temp_file = self.memory_file + ".tmp"
+        with self.lock:
+            directory = os.path.dirname(
+                os.path.abspath(self.memory_file)
+            )
 
-        with open(temp_file, "w") as f:
-            json.dump(self.state, f, indent=2)
+            temp_path = None
 
-        os.replace(temp_file, self.memory_file)
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=directory,
+                    delete=False
+                ) as f:
+                    temp_path = f.name
 
-    # Working memory
+                    json.dump(
+                        self.state,
+                        f,
+                        indent=2,
+                        ensure_ascii=False
+                    )
+
+                    f.flush()
+                    os.fsync(f.fileno())
+
+                os.replace(temp_path, self.memory_file)
+
+            except OSError:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise
+
+    # =========================================
+    # WORKING MEMORY
+    # =========================================
+
     def focus(self, task):
-        self.state["current_focus"] = task
-        self.save_memory()
+        with self.lock:
+            self.state["current_focus"] = task
+            self.save_memory()
 
-    # Record experiences
+        return task
+
+    # =========================================
+    # EXPERIENCE MEMORY
+    # =========================================
+
     def experience(self, event, outcome):
-        record = {
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
-            "event": event,
-            "outcome": outcome
+        with self.lock:
+            record = {
+                "id": self.new_id(),
+                "timestamp": self.timestamp(),
+                "event": event,
+                "outcome": outcome
+            }
+
+            self.state["experiences"].append(record)
+            self.state["experiences"] = (
+                self.state["experiences"][-100:]
+            )
+
+            self.save_memory()
+
+        return record
+
+    # =========================================
+    # VERIFIED LEARNING
+    # =========================================
+
+    def learn(self, topic, information, source=None):
+        with self.lock:
+            record = {
+                "id": self.new_id(),
+                "topic": topic,
+                "information": information,
+                "source": source,
+                "verified": False,
+                "verification_notes": None,
+                "timestamp": self.timestamp()
+            }
+
+            self.state["knowledge"].append(record)
+
+            self.state["knowledge"] = (
+                self.state["knowledge"][-200:]
+            )
+
+            self.save_memory()
+
+        return record
+
+    def verify_knowledge(self, knowledge_id, verified, notes=None):
+        with self.lock:
+            for item in self.state["knowledge"]:
+                if item["id"] == knowledge_id:
+                    item["verified"] = bool(verified)
+                    item["verification_notes"] = notes
+                    item["verified_at"] = self.timestamp()
+
+                    self.save_memory()
+                    return item
+
+        return None
+
+    # =========================================
+    # LONG-TERM MEMORY RETRIEVAL
+    # =========================================
+
+    def search_memory(self, query, sections=None):
+        query = query.lower().strip()
+
+        if not query:
+            return []
+
+        if sections is None:
+            sections = [
+                "knowledge",
+                "experiences",
+                "reflections",
+                "goals",
+                "curiosity",
+                "self_assessments",
+                "reasoning_log"
+            ]
+
+        results = []
+
+        with self.lock:
+            for section in sections:
+                if section not in self.state:
+                    continue
+
+                records = self.state[section]
+
+                if not isinstance(records, list):
+                    continue
+
+                for record in records:
+                    content = json.dumps(
+                        record,
+                        ensure_ascii=False
+                    ).lower()
+
+                    if query in content:
+                        results.append({
+                            "section": section,
+                            "record": record
+                        })
+
+        return results
+
+    # =========================================
+    # REASONING ENGINE
+    # =========================================
+
+    def reason(self, question, evidence, alternatives=None):
+        """
+        Organizes supplied evidence into supporting,
+        opposing and neutral information.
+
+        This is transparent evidence analysis,
+        not independent factual verification.
+        """
+
+        if isinstance(evidence, str):
+            evidence = [evidence]
+
+        alternatives = alternatives or []
+
+        if not isinstance(evidence, list):
+            raise TypeError("Evidence must be a list or string")
+
+        supporting = []
+        opposing = []
+        neutral = []
+
+        for item in evidence:
+            if isinstance(item, str):
+                item = {
+                    "statement": item,
+                    "position": "neutral"
+                }
+
+            if not isinstance(item, dict):
+                continue
+
+            statement = item.get("statement", "")
+            position = item.get("position", "neutral")
+
+            if not statement:
+                continue
+
+            entry = {
+                "statement": statement,
+                "source": item.get("source")
+            }
+
+            if position == "supports":
+                supporting.append(entry)
+            elif position == "opposes":
+                opposing.append(entry)
+            else:
+                neutral.append(entry)
+
+        if len(supporting) > len(opposing):
+            balance = "more_supporting_evidence"
+        elif len(opposing) > len(supporting):
+            balance = "more_opposing_evidence"
+        elif supporting or opposing:
+            balance = "mixed_evidence"
+        else:
+            balance = "insufficient_evidence"
+
+        result = {
+            "id": self.new_id(),
+            "question": question,
+            "supporting_evidence": supporting,
+            "opposing_evidence": opposing,
+            "neutral_evidence": neutral,
+            "alternatives": alternatives,
+            "evidence_balance": balance,
+            "limitations": [
+                "Evidence has not been independently verified.",
+                "Evidence counts do not establish truth.",
+                "Additional research may change the assessment."
+            ],
+            "timestamp": self.timestamp()
         }
 
-        self.state["experiences"].append(record)
-        self.state["experiences"] = self.state["experiences"][-100:]
-        self.save_memory()
+        with self.lock:
+            self.state["reasoning_log"].append(result)
+            self.state["reasoning_log"] = (
+                self.state["reasoning_log"][-100:]
+            )
+            self.save_memory()
 
-    # Self-monitoring
-    def evaluate(self, task, result, confidence):
+        return result
+
+    # =========================================
+    # SELF-MONITORING AND EVALUATION
+    # =========================================
+
+    def evaluate(
+        self,
+        task,
+        result,
+        confidence,
+        expected_result=None,
+        success=None
+    ):
+        confidence = float(confidence)
+        confidence = max(0.0, min(1.0, confidence))
+
+        if success not in (True, False, None):
+            raise ValueError("success must be True, False or None")
+
         assessment = {
+            "id": self.new_id(),
             "task": task,
-            "result": result,
-            "confidence": max(0, min(1, confidence)),
-            "timestamp": datetime.utcnow().isoformat()
+            "expected_result": expected_result,
+            "actual_result": result,
+            "confidence": confidence,
+            "success": success,
+            "timestamp": self.timestamp()
         }
 
-        self.state["self_assessments"].append(assessment)
-        self.save_memory()
+        with self.lock:
+            self.state["self_assessments"].append(assessment)
+
+            self.state["self_assessments"] = (
+                self.state["self_assessments"][-100:]
+            )
+
+            self.save_memory()
 
         return assessment
 
-    # Metacognitive reflection
+    # =========================================
+    # SELF-IMPROVEMENT ANALYSIS
+    # =========================================
+
+    def analyze_performance(self):
+        with self.lock:
+            assessments = self.state["self_assessments"]
+
+            evaluated = [
+                item for item in assessments
+                if item.get("success") is not None
+            ]
+
+            successful = [
+                item for item in evaluated
+                if item["success"] is True
+            ]
+
+            unsuccessful = [
+                item for item in evaluated
+                if item["success"] is False
+            ]
+
+            total = len(evaluated)
+
+            success_rate = (
+                len(successful) / total if total else None
+            )
+
+            recommendations = []
+
+            if not total:
+                recommendations.append(
+                    "Record evaluated outcomes to establish a baseline."
+                )
+
+            if unsuccessful:
+                recommendations.append(
+                    "Review unsuccessful tasks and identify recurring errors."
+                )
+
+            if total >= 5 and success_rate < 0.7:
+                recommendations.append(
+                    "Review problem-solving methods and test alternative approaches."
+                )
+
+            if successful:
+                recommendations.append(
+                    "Identify which methods contributed to successful results."
+                )
+
+            return {
+                "total_evaluated": total,
+                "successful": len(successful),
+                "unsuccessful": len(unsuccessful),
+                "success_rate": success_rate,
+                "recommendations": recommendations
+            }
+
+    # =========================================
+    # METACOGNITIVE REFLECTION
+    # =========================================
+
     def reflect(self, observation, improvement):
         reflection = {
+            "id": self.new_id(),
             "observation": observation,
             "improvement": improvement,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": self.timestamp()
         }
 
-        self.state["reflections"].append(reflection)
-        self.state["reflections"] = self.state["reflections"][-50:]
-        self.save_memory()
+        with self.lock:
+            self.state["reflections"].append(reflection)
 
-    # Goal management
-    def create_goal(self, goal):
-        self.state["goals"].append({
-            "id": str(uuid.uuid4()),
-            "goal": goal,
-            "status": "active",
-            "created": datetime.utcnow().isoformat()
-        })
-        self.save_memory()
+            self.state["reflections"] = (
+                self.state["reflections"][-50:]
+            )
 
-    # Curiosity engine
+            self.save_memory()
+
+        return reflection
+
+    # =========================================
+    # GOAL MANAGEMENT
+    # =========================================
+
+    def create_goal(self, goal, tasks=None):
+        tasks = tasks or []
+
+        with self.lock:
+            record = {
+                "id": self.new_id(),
+                "goal": goal,
+                "status": "active",
+                "tasks": [],
+                "created": self.timestamp()
+            }
+
+            for task in tasks:
+                record["tasks"].append({
+                    "id": self.new_id(),
+                    "description": task,
+                    "status": "pending"
+                })
+
+            self.state["goals"].append(record)
+            self.save_memory()
+
+        return record
+
+    def add_goal_task(self, goal_id, description):
+        with self.lock:
+            for goal in self.state["goals"]:
+                if goal["id"] == goal_id:
+                    task = {
+                        "id": self.new_id(),
+                        "description": description,
+                        "status": "pending"
+                    }
+
+                    goal["tasks"].append(task)
+                    self.save_memory()
+
+                    return task
+
+        return None
+
+    def update_goal_task(self, goal_id, task_id, status):
+        allowed = ["pending", "in_progress", "completed"]
+
+        if status not in allowed:
+            raise ValueError("Invalid task status")
+
+        with self.lock:
+            for goal in self.state["goals"]:
+                if goal["id"] == goal_id:
+                    for task in goal["tasks"]:
+                        if task["id"] == task_id:
+                            task["status"] = status
+
+                            self.save_memory()
+                            return task
+
+        return None
+
+    def update_goal_status(self, goal_id, status):
+        allowed = ["active", "completed", "paused"]
+
+        if status not in allowed:
+            raise ValueError("Invalid goal status")
+
+        with self.lock:
+            for goal in self.state["goals"]:
+                if goal["id"] == goal_id:
+                    goal["status"] = status
+                    goal["updated"] = self.timestamp()
+
+                    self.save_memory()
+                    return goal
+
+        return None
+
+    # =========================================
+    # CURIOSITY ENGINE
+    # =========================================
+
     def ask_question(self, question):
-        self.state["curiosity"].append({
+        record = {
+            "id": self.new_id(),
             "question": question,
-            "created": datetime.utcnow().isoformat(),
-            "explored": False
-        })
-        self.save_memory()
-
-    # Knowledge acquisition
-    def learn(self, topic, information):
-        self.state["knowledge"].append({
-            "topic": topic,
-            "information": information,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-        self.state["knowledge"] = self.state["knowledge"][-200:]
-        self.save_memory()
-
-    # Cognitive status
-    def status(self):
-        return {
-            "identity": self.identity,
-            "focus": self.state["current_focus"],
-            "active_goals": [
-                g for g in self.state["goals"]
-                if g["status"] == "active"
-            ],
-            "experiences": len(self.state["experiences"]),
-            "knowledge_entries": len(self.state["knowledge"]),
-            "reflections": len(self.state["reflections"]),
-            "open_questions": len(self.state["curiosity"])
+            "created": self.timestamp(),
+            "explored": False,
+            "answer": None
         }
 
+        with self.lock:
+            self.state["curiosity"].append(record)
+            self.state["curiosity"] = (
+                self.state["curiosity"][-100:]
+            )
+            self.save_memory()
+
+        return record
+
+    def resolve_question(self, question_id, answer):
+        with self.lock:
+            for question in self.state["curiosity"]:
+                if question["id"] == question_id:
+                    question["explored"] = True
+                    question["answer"] = answer
+                    question["resolved_at"] = self.timestamp()
+
+                    self.save_memory()
+                    return question
+
+        return None
+
+    # =========================================
+    # COGNITIVE STATUS
+    # =========================================
+
+    def status(self):
+        with self.lock:
+            return {
+                "identity": self.identity,
+                "focus": self.state["current_focus"],
+
+                "active_goals": [
+                    g for g in self.state["goals"]
+                    if g["status"] == "active"
+                ],
+
+                "completed_goals": sum(
+                    1 for g in self.state["goals"]
+                    if g["status"] == "completed"
+                ),
+
+                "experiences": len(self.state["experiences"]),
+                "knowledge_entries": len(self.state["knowledge"]),
+
+                "verified_knowledge": sum(
+                    1 for k in self.state["knowledge"]
+                    if k.get("verified") is True
+                ),
+
+                "reflections": len(self.state["reflections"]),
+                "open_questions": sum(
+                    1 for q in self.state["curiosity"]
+                    if not q.get("explored", False)
+                ),
+
+                "reasoning_sessions": len(
+                    self.state["reasoning_log"]
+                ),
+
+                "performance": self.analyze_performance()
+            }
+
+
+# =============================================
+# XEMEX.AI STARTUP
+# =============================================
 
 if __name__ == "__main__":
+
     xemex = XemexCognitiveCore()
 
     xemex.focus("Develop advanced reasoning")
@@ -142,21 +605,55 @@ if __name__ == "__main__":
         "Code generated and tested"
     )
 
-    xemex.evaluate(
-        "Coding task",
-        "Successful execution",
-        0.85
+    xemex.learn(
+        "Python",
+        "Python supports object-oriented programming.",
+        source="Python documentation"
     )
 
-    xemex.reflect(
-        "The solution worked",
-        "Improve error handling"
+    goal = xemex.create_goal(
+        "Develop better reasoning capabilities",
+        tasks=[
+            "Study reasoning techniques",
+            "Evaluate previous results",
+            "Improve error handling"
+        ]
     )
-
-    xemex.create_goal("Develop better reasoning capabilities")
 
     xemex.ask_question(
         "How can AI systems improve their reasoning?"
     )
 
+    reasoning = xemex.reason(
+        "Does the proposed solution meet its requirements?",
+        [
+            {
+                "statement": "All required functions are implemented.",
+                "position": "supports"
+            },
+            {
+                "statement": "The solution has not been tested in production.",
+                "position": "opposes"
+            }
+        ],
+        alternatives=[
+            "Run automated tests",
+            "Perform manual validation"
+        ]
+    )
+
+    xemex.evaluate(
+        "Cognitive core test",
+        "Core initialized successfully",
+        0.85,
+        expected_result="Core initialized successfully",
+        success=True
+    )
+
+    xemex.reflect(
+        "The cognitive core initialized successfully.",
+        "Add automated testing and external knowledge verification."
+    )
+
+    print("\n===== XEMEX.AI COGNITIVE STATUS =====")
     print(json.dumps(xemex.status(), indent=2))
