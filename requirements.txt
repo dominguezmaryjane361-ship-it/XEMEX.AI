@@ -1,4 +1,5 @@
-requests
+```text
 gradio
-duckduckgo-search
+requests
 supabase
+duckduckgo-search
