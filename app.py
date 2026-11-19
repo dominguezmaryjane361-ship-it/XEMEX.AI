@@ -557,6 +557,7 @@ def chat_with_xemex(message, history):
         code, output, debug_log = self_coding_loop(clean_msg)
         reply = (
             f"### 🛠️ Self-Coding Execution Log\n{debug_log}\n\n"
+from free_thinking import xemex_thinking
 
 
 
