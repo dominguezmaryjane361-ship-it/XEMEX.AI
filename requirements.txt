@@ -2,3 +2,6 @@ gradio==6.32.0
 requests
 supabase
 duckduckgo-search
+numpy
+scikit-learn
+torch
