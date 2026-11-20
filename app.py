@@ -1,18 +1,39 @@
+
 import os
 import json
 import time
 import threading
 from datetime import datetime, timezone
+
+# Existing learning intelligence
 from learning_intelligence import (
     analyze_learning_observations,
     generate_individualized_lesson,
     record_learning_progress,
     get_learning_progress,
     generate_progress_summary,
-    get_learning_engine_information
+    get_learning_engine_information,
 )
+
+# Teaching methods
+from teaching_methods import (
+    build_teaching_prompt,
+    build_lesson_prompt,
+    build_review_prompt,
+    get_teaching_status,
+)
+
+# Specialized learning support
+from learning_support import (
+    build_learning_support_prompt,
+    generate_engagement_activity,
+    recommend_teaching_adjustment,
+    get_learning_support_status,
+)
+
 import requests
 import gradio as gr
+
 
 # Optional web search
 try:
