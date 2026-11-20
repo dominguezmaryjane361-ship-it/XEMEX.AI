@@ -3,7 +3,14 @@ import json
 import time
 import threading
 from datetime import datetime, timezone
-
+from learning_intelligence import (
+    analyze_learning_observations,
+    generate_individualized_lesson,
+    record_learning_progress,
+    get_learning_progress,
+    generate_progress_summary,
+    get_learning_engine_information
+)
 import requests
 import gradio as gr
 
