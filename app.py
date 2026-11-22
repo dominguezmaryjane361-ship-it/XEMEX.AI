@@ -1323,6 +1323,12 @@ with gr.Blocks(title="XEMEX.AI") as app:
             value="student",
             label="Choose your XEMEX view",
         )
+        with gr.Column(visible=False) as parent_lock_column:
+            gr.Markdown("## Parent sign-in")
+            gr.Markdown("For privacy on shared devices, enter the parent account password to open settings.")
+            parent_reauth_password = gr.Textbox(label="Parent account password", type="password", max_lines=1)
+            parent_reauth_button = gr.Button("Unlock parent tools", variant="primary")
+            parent_reauth_status = gr.Markdown("Parent tools are locked while a student is using XEMEX.")
         with gr.Column(visible=False) as parent_tools_column:
             with gr.Accordion("Parent tools", open=False):
                 tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
@@ -1418,8 +1424,13 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     view_mode.change(
         switch_xemex_view,
-        inputs=[view_mode, student_access_state],
-        outputs=[parent_tools_column, student_workspace_column, student_lock_column, student_access_state],
+        inputs=[view_mode, student_access_state, parent_access_state, session_state],
+        outputs=[parent_tools_column, parent_lock_column, student_workspace_column, student_lock_column, student_access_state, parent_access_state],
+    )
+    parent_reauth_button.click(
+        unlock_parent_tools,
+        inputs=[parent_reauth_password, session_state],
+        outputs=[parent_access_state, parent_reauth_status, session_state, parent_tools_column, parent_lock_column],
     )
     account_memory_state.change(
         learner_profile_choices,
