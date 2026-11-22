@@ -841,7 +841,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     auth_outputs = [
         session_state, account_memory_state, chatbot,
-        account_status, login_panel, chat_panel
+        auth_status, account_status, login_panel, chat_panel
     ]
     sign_in_button.click(
         sign_in_account,
