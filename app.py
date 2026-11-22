@@ -38,6 +38,7 @@ import account_memory as account_store
 from student_learning import build_student_activity_prompt
 from student_access import make_pin_record, verify_pin
 import student_accounts
+from registration_validation import validate_learner_name
 
 
 # Optional web search
@@ -721,6 +722,9 @@ def create_account(email, password, setup_for, learner_age, learner_name):
     if setup_for not in ("self", "child"):
         message = "Choose whether XEMEX is being set up for yourself or a child."
         return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+    name_error = validate_learner_name(setup_for, learner_name)
+    if name_error:
+        return None, account_store.default_user_memory(), [], name_error, name_error, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
     if setup_for == "self" and age < 13:
         message = "Anyone under 13 must have a parent or guardian set up XEMEX."
         return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
@@ -734,9 +738,6 @@ def create_account(email, password, setup_for, learner_age, learner_name):
         return result
     account_data, memory_status = account_store.load_user_memory(session)
     learner_name = str(learner_name or "").strip()[:80]
-    if setup_for == "child" and not learner_name:
-        message = "Enter the child's name or nickname."
-        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
     account_data["registration_setup"] = {
         "setup_for": setup_for,
         "learner_age": age,
