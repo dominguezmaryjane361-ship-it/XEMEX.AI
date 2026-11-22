@@ -289,6 +289,19 @@ def _normalize_memory(data):
                 },
             })
         result["learners"] = cleaned_learners
+    registration_setup = data.get("registration_setup")
+    if isinstance(registration_setup, dict):
+        setup_for = registration_setup.get("setup_for")
+        age = registration_setup.get("learner_age")
+        age_group = registration_setup.get("age_group")
+        if setup_for in ("self", "child") and isinstance(age, int) and not isinstance(age, bool) and 3 <= age <= 120:
+            result["registration_setup"] = {
+                "setup_for": setup_for,
+                "learner_age": age,
+                "age_group": str(age_group or "elementary")[:40],
+                "adult_learner_consent": registration_setup.get("adult_learner_consent") is True,
+                "created_at": str(registration_setup.get("created_at") or "")[:40],
+            }
     result["updated_at"] = data.get("updated_at")
     return result
 
