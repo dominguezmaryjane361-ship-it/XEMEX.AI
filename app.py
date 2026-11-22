@@ -681,6 +681,11 @@ def sign_out_account(session):
     return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
 
 
+def sign_out_account_and_lock_student(session):
+    outputs = sign_out_account(session)
+    return (*outputs, None)
+
+
 def _parent_control_status(account_data, learner_id, activity_type):
     learner = next(
         (item for item in (account_data or {}).get("learners", []) if item.get("id") == learner_id),
@@ -1489,9 +1494,9 @@ with gr.Blocks(title="XEMEX.AI") as app:
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
 
     sign_out_button.click(
-        sign_out_account,
+        sign_out_account_and_lock_student,
         inputs=[session_state],
-        outputs=auth_outputs,
+        outputs=auth_outputs + [student_access_state],
     )
 
 
