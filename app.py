@@ -845,11 +845,12 @@ def unlock_student_workspace(learner_id, pin, session, account_data):
     return access, "Welcome, " + learner.get("name", "learner") + "! Your learning space is unlocked.", session, gr.update(visible=True), gr.update(visible=False)
 
 
-def learner_profile_choices(account_data):
-    return gr.update(choices=[
-        (item.get("name", "Learner"), item.get("id"))
-        for item in (account_data or {}).get("learners", [])
-    ], value=None)
+def learner_profile_choices(account_data, current_learner_id):
+    learners = (account_data or {}).get("learners", [])
+    choices = [(item.get("name", "Learner"), item.get("id")) for item in learners]
+    valid_ids = {item.get("id") for item in learners}
+    value = current_learner_id if current_learner_id in valid_ids else None
+    return gr.update(choices=choices, value=value)
 
 
 def switch_xemex_view(view, student_access):
@@ -1408,7 +1409,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
     )
     account_memory_state.change(
         learner_profile_choices,
-        inputs=[account_memory_state],
+        inputs=[account_memory_state, student_profile],
         outputs=[student_profile],
     )
     unlock_student_button.click(
