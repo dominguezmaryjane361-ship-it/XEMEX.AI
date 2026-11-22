@@ -845,6 +845,16 @@ def unlock_student_workspace(learner_id, pin, session, account_data):
     return access, "Welcome, " + learner.get("name", "learner") + "! Your learning space is unlocked.", session, gr.update(visible=True), gr.update(visible=False)
 
 
+def unlock_parent_tools(password, session):
+    if not isinstance(session, dict) or not session.get("user_id"):
+        return None, "Please sign in to the parent account again.", session, gr.update(visible=False), gr.update(visible=True)
+    verified, message = account_store.sign_in(session.get("email", ""), password)
+    if not verified or verified.get("user_id") != session.get("user_id"):
+        return None, "Parent sign-in was not verified. Check the password and try again.", session, gr.update(visible=False), gr.update(visible=True)
+    access = {"account_user_id": verified["user_id"]}
+    return access, "Parent access verified.", verified, gr.update(visible=True), gr.update(visible=False)
+
+
 def learner_profile_choices(account_data, current_learner_id):
     learners = (account_data or {}).get("learners", [])
     choices = [(item.get("name", "Learner"), item.get("id")) for item in learners]
@@ -853,15 +863,18 @@ def learner_profile_choices(account_data, current_learner_id):
     return gr.update(choices=choices, value=value)
 
 
-def switch_xemex_view(view, student_access):
+def switch_xemex_view(view, student_access, parent_access, session):
     is_parent = view == "parent"
-    unlocked = isinstance(student_access, dict) and bool(student_access.get("learner_id"))
-    next_access = None if is_parent else student_access
+    user_id = (session or {}).get("user_id")
+    parent_unlocked = isinstance(parent_access, dict) and parent_access.get("account_user_id") == user_id
+    student_unlocked = isinstance(student_access, dict) and student_access.get("account_user_id") == user_id
     return (
-        gr.update(visible=is_parent),
-        gr.update(visible=(not is_parent and unlocked)),
-        gr.update(visible=(not is_parent and not unlocked)),
-        next_access,
+        gr.update(visible=(is_parent and parent_unlocked)),
+        gr.update(visible=(is_parent and not parent_unlocked)),
+        gr.update(visible=(not is_parent and student_unlocked)),
+        gr.update(visible=(not is_parent and not student_unlocked)),
+        None if is_parent else student_access,
+        parent_access if is_parent else None,
     )
 
 
@@ -1292,6 +1305,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
     session_state = gr.State(value=None)
     account_memory_state = gr.State(value=account_store.default_user_memory())
     student_access_state = gr.State(value=None)
+    parent_access_state = gr.State(value=None)
 
     with gr.Column(visible=True) as login_panel:
         gr.Markdown("## Sign in or create an account")
