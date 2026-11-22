@@ -23,6 +23,10 @@ class ChildSafetyTests(unittest.TestCase):
         self.assertEqual(classify_safety_risk("I'm in danger right now"), "immediate_danger")
         self.assertIn("911", crisis_response("I'm in danger right now"))
 
+    def test_additional_self_harm_and_abuse_phrases_are_detected(self):
+        self.assertEqual(classify_safety_risk("I don't want to live"), "self_harm")
+        self.assertEqual(classify_safety_risk("My dad hits me"), "abuse")
+
     def test_non_risk_message_has_no_crisis_override(self):
         self.assertIsNone(classify_safety_risk("Can you help me with fractions?"))
         self.assertIsNone(crisis_response("Can you help me with fractions?"))
