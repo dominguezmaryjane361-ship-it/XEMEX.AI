@@ -715,6 +715,64 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     return history, account_data, status, ""
 
 
+def record_account_learning_progress(topic, skill, performance, notes, session, account_data, age_group, subject):
+    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
+        return account_data, "Please sign in before saving learning progress."
+    if not isinstance(account_data, dict):
+        account_data = account_store.default_user_memory()
+
+    topic = str(topic or "").strip()[:200]
+    skill = str(skill or "").strip()[:150]
+    if not topic or not skill:
+        return account_data, "Enter both a topic and a skill before saving."
+    allowed_performance = {"mastered", "developing", "needs practice", "not yet assessed"}
+    performance = str(performance or "not yet assessed").strip().lower()
+    if performance not in allowed_performance:
+        performance = "not yet assessed"
+
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "subject": str(subject or "general learning")[:100],
+        "topic": topic,
+        "skill": skill,
+        "age_group": str(age_group or "elementary")[:40],
+        "performance": performance,
+        "notes": str(notes or "").strip()[:500],
+        "status": "parent_or_tutor_observation",
+    }
+    account_data.setdefault("learning_progress", []).append(record)
+    account_data["learning_progress"] = account_data["learning_progress"][-100:]
+    saved, status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        return account_data, "Progress was added in this session but could not be saved: " + status
+    return account_data, "Learning check saved privately to this account."
+
+
+def summarize_account_learning_progress(session, account_data):
+    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
+        return "Please sign in before viewing learning progress."
+    records = (account_data or {}).get("learning_progress", [])
+    if not records:
+        return "No learning checks have been recorded for this account yet."
+    # Summarize only this authenticated account's records; never use the
+    # legacy shared learning-data file or another learner's history.
+    prompt = (
+        "Summarize these educational observations for a parent or tutor. "
+        "Separate recorded observations from conclusions. Identify skills "
+        "marked mastered, developing, or needing practice. Recommend a "
+        "small next step. Do not diagnose a disability, infer low ability, "
+        "or treat missing records as lack of ability. Be encouraging and concise.\n\n"
+        + json.dumps(records[-50:], ensure_ascii=False)
+    )
+    return ask_llm([{
+        "role": "system",
+        "content": "You are an educational progress assistant. Do not diagnose or overstate mastery."
+    }, {
+        "role": "user",
+        "content": prompt
+    }])
+
+
 def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic"):
     message = (message or "").strip()
     history = history or []
@@ -917,6 +975,19 @@ with gr.Blocks(title="XEMEX.AI") as app:
             learner_goal = gr.Textbox(label="Learning goal", value="Understand the topic")
             lesson_topic = gr.Textbox(label="Start a lesson on", placeholder="For example: fractions, reading, or planets")
             lesson_button = gr.Button("Create an interactive lesson")
+            gr.Markdown("### Learning progress")
+            progress_topic = gr.Textbox(label="Topic", placeholder="For example: fractions")
+            progress_skill = gr.Textbox(label="Skill observed", placeholder="For example: adding fractions with like denominators")
+            progress_performance = gr.Dropdown(
+                choices=["mastered", "developing", "needs practice", "not yet assessed"],
+                value="not yet assessed",
+                label="Observed performance",
+            )
+            progress_notes = gr.Textbox(label="Notes (optional)", lines=2)
+            with gr.Row():
+                save_progress_button = gr.Button("Save learning check")
+                summarize_progress_button = gr.Button("Summarize progress")
+            progress_status = gr.Markdown("Progress is saved privately to the signed-in account.")
         chatbot = gr.Chatbot(label="Conversation", type="messages")
         message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
         with gr.Row():
@@ -948,6 +1019,19 @@ with gr.Blocks(title="XEMEX.AI") as app:
         start_tutoring_lesson,
         inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject],
         outputs=[chatbot, account_memory_state, account_status, lesson_topic],
+    )
+    save_progress_button.click(
+        record_account_learning_progress,
+        inputs=[
+            progress_topic, progress_skill, progress_performance, progress_notes,
+            session_state, account_memory_state, learner_age_group, learner_subject,
+        ],
+        outputs=[account_memory_state, progress_status],
+    )
+    summarize_progress_button.click(
+        summarize_account_learning_progress,
+        inputs=[session_state, account_memory_state],
+        outputs=[progress_status],
     )
 
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
