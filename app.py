@@ -1476,7 +1476,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
             independent_student_practice_button = gr.Button("Start practice", variant="primary")
             independent_student_hint_button = gr.Button("Get a hint")
         independent_student_activity_status = gr.Markdown("Choose a topic to begin.")
-        independent_student_chatbot = gr.Chatbot(label="Your learning conversation", type="messages")
+        independent_student_chatbot = gr.Chatbot(label="Your learning conversation")
         independent_student_message = gr.Textbox(label="Talk with XEMEX", placeholder="Ask a question or tell XEMEX what you are learning.")
         with gr.Row():
             independent_student_send_button = gr.Button("Send", variant="primary")
@@ -1572,7 +1572,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
                 student_practice_button = gr.Button("Start practice", variant="primary")
                 student_hint_button = gr.Button("Get a hint")
             student_activity_status = gr.Markdown("Choose your learner profile in Parent view before starting.")
-            chatbot = gr.Chatbot(label="Your learning conversation", type="messages")
+            chatbot = gr.Chatbot(label="Your learning conversation")
             message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
             with gr.Row():
                 send_button = gr.Button("Send", variant="primary")
