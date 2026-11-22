@@ -247,9 +247,12 @@ def _normalize_memory(data):
             controls = learner.get("parent_controls")
             if not isinstance(controls, dict):
                 controls = {}
+            allow_chat = controls.get("allow_chat", True)
             allow_practice = controls.get("allow_practice", True)
             allow_hints = controls.get("allow_hints", True)
             daily_limit = controls.get("daily_activity_limit", 20)
+            if not isinstance(allow_chat, bool):
+                allow_chat = True
             if not isinstance(allow_practice, bool):
                 allow_practice = True
             if not isinstance(allow_hints, bool):
@@ -283,6 +286,7 @@ def _normalize_memory(data):
                 "pin_failed_attempts": min(attempts, 5),
                 "pin_locked_until": max(0, float(locked_until)),
                 "parent_controls": {
+                    "allow_chat": allow_chat,
                     "allow_practice": allow_practice,
                     "allow_hints": allow_hints,
                     "daily_activity_limit": daily_limit,
