@@ -3,6 +3,7 @@ import os
 import json
 import time
 import threading
+import uuid
 from datetime import datetime, timezone
 
 # Existing learning intelligence
@@ -650,11 +651,12 @@ def _authenticate_account(email, password, create_account=False):
         session, status = account_store.sign_in(email, password)
 
     if not session:
-        return None, account_store.default_user_memory(), [], status, status, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic"
+        return None, account_store.default_user_memory(), [], status, status, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
 
     account_data, memory_status = account_store.load_user_memory(session)
     restored = _restore_account_chat(account_data)
-    return session, account_data, restored, status + " " + memory_status, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True), account_data.get("tutor_settings", {}).get("age_group", "elementary"), account_data.get("tutor_settings", {}).get("subject", "General learning"), account_data.get("tutor_settings", {}).get("learning_goal", "Understand the topic")
+    learner_choices = [(item["name"], item["id"]) for item in account_data.get("learners", [])]
+    return session, account_data, restored, status + " " + memory_status, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True), account_data.get("tutor_settings", {}).get("age_group", "elementary"), account_data.get("tutor_settings", {}).get("subject", "General learning"), account_data.get("tutor_settings", {}).get("learning_goal", "Understand the topic"), gr.update(choices=learner_choices, value=(learner_choices[0][1] if learner_choices else None))
 
 
 def sign_in_account(email, password):
@@ -667,10 +669,44 @@ def create_account(email, password):
 
 def sign_out_account(session):
     account_store.sign_out(session)
-    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic"
+    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
 
 
-def start_tutoring_lesson(topic, history, session, account_data, age_group, subject):
+def create_learner_profile(name, age_group, session, account_data):
+    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
+        return account_data, gr.update(), "Please sign in before creating a learner profile."
+    name = str(name or "").strip()[:80]
+    if not name:
+        return account_data, gr.update(), "Enter a learner name or nickname."
+    if not isinstance(account_data, dict):
+        account_data = account_store.default_user_memory()
+    learners = account_data.setdefault("learners", [])
+    if len(learners) >= 20:
+        return account_data, gr.update(), "This account has reached the 20-profile limit."
+    if any(item.get("name", "").casefold() == name.casefold() for item in learners):
+        return account_data, gr.update(), "A learner with that name already exists."
+    learner = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "age_group": str(age_group or "elementary")[:40],
+    }
+    learners.append(learner)
+    saved, status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        learners.pop()
+        return account_data, gr.update(), "Profile could not be saved: " + status
+    choices = [(item["name"], item["id"]) for item in learners]
+    return account_data, gr.update(choices=choices, value=learner["id"]), "Learner profile created and saved privately."
+
+
+def select_learner_profile(learner_id, account_data):
+    for learner in (account_data or {}).get("learners", []):
+        if learner.get("id") == learner_id:
+            return learner.get("age_group", "elementary"), "Selected learner: " + learner.get("name", "Learner")
+    return "elementary", "Choose or create a learner profile. Existing account progress remains available."
+
+
+def start_tutoring_lesson(topic, history, session, account_data, age_group, subject, learner_id=None):
     history = history or []
     topic = (topic or "").strip()
     if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
@@ -706,6 +742,7 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
         "subject": str(subject or "general learning")[:100],
         "topic": topic[:200],
         "age_group": str(age_group or "elementary")[:40],
+        "learner_id": str(learner_id or "")[:64],
         "status": "introduced",
     })
     account_data["learning_progress"] = account_data["learning_progress"][-100:]
@@ -715,7 +752,7 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     return history, account_data, status, ""
 
 
-def record_account_learning_progress(topic, skill, performance, notes, session, account_data, age_group, subject):
+def record_account_learning_progress(topic, skill, performance, notes, session, account_data, age_group, subject, learner_id=None):
     if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
         return account_data, "Please sign in before saving learning progress."
     if not isinstance(account_data, dict):
@@ -736,6 +773,7 @@ def record_account_learning_progress(topic, skill, performance, notes, session, 
         "topic": topic,
         "skill": skill,
         "age_group": str(age_group or "elementary")[:40],
+        "learner_id": str(learner_id or "")[:64],
         "performance": performance,
         "notes": str(notes or "").strip()[:500],
         "status": "parent_or_tutor_observation",
@@ -748,10 +786,12 @@ def record_account_learning_progress(topic, skill, performance, notes, session, 
     return account_data, "Learning check saved privately to this account."
 
 
-def summarize_account_learning_progress(session, account_data):
+def summarize_account_learning_progress(session, account_data, learner_id=None):
     if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
         return "Please sign in before viewing learning progress."
     records = (account_data or {}).get("learning_progress", [])
+    if learner_id:
+        records = [item for item in records if item.get("learner_id") == learner_id]
     if not records:
         return "No learning checks have been recorded for this account yet."
     # Summarize only this authenticated account's records; never use the
@@ -975,6 +1015,11 @@ with gr.Blocks(title="XEMEX.AI") as app:
             learner_goal = gr.Textbox(label="Learning goal", value="Understand the topic")
             lesson_topic = gr.Textbox(label="Start a lesson on", placeholder="For example: fractions, reading, or planets")
             lesson_button = gr.Button("Create an interactive lesson")
+            gr.Markdown("### Learner profiles")
+            learner_name_input = gr.Textbox(label="New learner name or nickname", placeholder="For example: Student 1")
+            create_learner_button = gr.Button("Create learner profile")
+            learner_profile = gr.Dropdown(label="Active learner profile", choices=[], value=None)
+            learner_profile_status = gr.Markdown("Create a profile for each child or teen. Profiles and progress are private to this account.")
             gr.Markdown("### Learning progress")
             progress_topic = gr.Textbox(label="Topic", placeholder="For example: fractions")
             progress_skill = gr.Textbox(label="Skill observed", placeholder="For example: adding fractions with like denominators")
@@ -998,7 +1043,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
     auth_outputs = [
         session_state, account_memory_state, chatbot,
         auth_status, account_status, login_panel, chat_panel,
-        learner_age_group, learner_subject, learner_goal
+        learner_age_group, learner_subject, learner_goal, learner_profile
     ]
     sign_in_button.click(
         sign_in_account,
@@ -1017,21 +1062,31 @@ with gr.Blocks(title="XEMEX.AI") as app:
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     lesson_button.click(
         start_tutoring_lesson,
-        inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject],
+        inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject, learner_profile],
         outputs=[chatbot, account_memory_state, account_status, lesson_topic],
     )
     save_progress_button.click(
         record_account_learning_progress,
         inputs=[
             progress_topic, progress_skill, progress_performance, progress_notes,
-            session_state, account_memory_state, learner_age_group, learner_subject,
+            session_state, account_memory_state, learner_age_group, learner_subject, learner_profile,
         ],
         outputs=[account_memory_state, progress_status],
     )
     summarize_progress_button.click(
         summarize_account_learning_progress,
-        inputs=[session_state, account_memory_state],
+        inputs=[session_state, account_memory_state, learner_profile],
         outputs=[progress_status],
+    )
+    create_learner_button.click(
+        create_learner_profile,
+        inputs=[learner_name_input, learner_age_group, session_state, account_memory_state],
+        outputs=[account_memory_state, learner_profile, learner_profile_status],
+    )
+    learner_profile.change(
+        select_learner_profile,
+        inputs=[learner_profile, account_memory_state],
+        outputs=[learner_age_group, learner_profile_status],
     )
 
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
