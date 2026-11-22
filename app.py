@@ -691,7 +691,7 @@ def _age_group_for_years(age):
     return "adult"
 
 
-def create_account(email, password, setup_for, learner_age, adult_consent):
+def create_account(email, password, setup_for, learner_age):
     setup_for = str(setup_for or "").strip().lower()
     try:
         age = int(learner_age)
@@ -719,7 +719,7 @@ def create_account(email, password, setup_for, learner_age, adult_consent):
         "setup_for": setup_for,
         "learner_age": age,
         "age_group": _age_group_for_years(age),
-        "adult_learner_consent": bool(adult_consent) if age >= 18 else False,
+        "adult_learner_consent": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     saved, save_status = account_store.save_user_memory(session, account_data)
@@ -1395,6 +1395,7 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
             "early_elementary": 7,
             "elementary": 10,
             "teen": 15,
+            "adult": 20,
         }.get(age_group, 10)
         tutor_context = (
             build_teaching_prompt(
@@ -1582,6 +1583,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                         ("Early elementary (6–8)", "early_elementary"),
                         ("Elementary (9–12)", "elementary"),
                         ("Teen (13–17)", "teen"),
+                        ("Adult / college", "adult"),
                     ],
                     value="elementary",
                     label="Learner age group",
@@ -1692,7 +1694,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     create_account_button.click(
         create_account,
-        inputs=[email_input, password_input, registration_setup_for, registration_age, gr.State(value=False)],
+        inputs=[email_input, password_input, registration_setup_for, registration_age],
         outputs=auth_outputs,
     )
 
