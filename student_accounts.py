@@ -89,10 +89,14 @@ def _student_defaults(username, email=None, learner_name="", age_group="elementa
     }
 
 
+def _session_signing_secret():
+    if len(SESSION_SECRET) < 32:
+        raise RuntimeError("Set XEMEX_STUDENT_SESSION_SECRET to a separate random secret of at least 32 characters.")
+    return SESSION_SECRET
+
+
 def _issue_session(record):
-    secret = SESSION_SECRET or SUPABASE_SERVICE_ROLE_KEY.encode("utf-8")
-    if not secret:
-        raise RuntimeError("Student session signing is not configured.")
+    secret = _session_signing_secret()
     payload = {
         "sid": record["id"],
         "pid": record["parent_user_id"],
@@ -112,7 +116,7 @@ def validate_student_session(session):
         return None
     try:
         raw, supplied = session["token"].rsplit(".", 1)
-        secret = SESSION_SECRET or SUPABASE_SERVICE_ROLE_KEY.encode("utf-8")
+        secret = _session_signing_secret()
         expected = hmac.new(secret, raw.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(supplied, expected):
             return None
