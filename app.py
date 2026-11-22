@@ -1422,19 +1422,19 @@ with gr.Blocks(title="XEMEX.AI") as app:
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     student_activity_inputs = [
         student_topic, chatbot, session_state, account_memory_state,
-        learner_age_group, learner_subject, learner_profile,
+        learner_age_group, learner_subject, student_profile, student_access_state,
     ]
     student_activity_outputs = [chatbot, account_memory_state, student_activity_status, session_state]
     student_practice_button.click(
-        lambda topic, history, session, data, age, subject, learner: generate_student_activity(
-            "practice", topic, history, session, data, age, subject, learner
+        lambda topic, history, session, data, age, subject, learner, access: generate_student_activity(
+            "practice", topic, history, session, data, age, subject, learner, access
         ),
         inputs=student_activity_inputs,
         outputs=student_activity_outputs,
     )
     student_hint_button.click(
-        lambda topic, history, session, data, age, subject, learner: generate_student_activity(
-            "hint", topic, history, session, data, age, subject, learner
+        lambda topic, history, session, data, age, subject, learner, access: generate_student_activity(
+            "hint", topic, history, session, data, age, subject, learner, access
         ),
         inputs=student_activity_inputs,
         outputs=student_activity_outputs,
