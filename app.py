@@ -3,6 +3,7 @@ import os
 import json
 import time
 import threading
+import tempfile
 import uuid
 from datetime import datetime, timezone
 
@@ -814,6 +815,45 @@ def create_account(email, password, setup_for, learner_age, learner_name):
     result[3] = "Account created. " + save_status
     result[4] = result[3]
     return tuple(result)
+
+
+def export_account_data(session):
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return None, session_status
+    account_data, memory_status = account_store.load_user_memory(session)
+    linked_students, student_status = student_accounts.export_parent_student_data(session)
+    payload = {
+        "product": "XEMEX.AI",
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "account": {
+            "email": session.get("email", ""),
+            "user_id": session.get("user_id", ""),
+        },
+        "account_memory": account_data,
+        "linked_student_accounts": linked_students,
+    }
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".json",
+            prefix="xemex-data-export-", delete=False,
+        ) as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            path = handle.name
+        return path, "Your export includes account memory and linked student data. " + memory_status + " " + student_status
+    except OSError as error:
+        return None, "Could not create the export file: " + str(error)[:180]
+
+
+def delete_account_from_settings(password, confirmation, session, parent_access, account_data, history):
+    if confirmation != "DELETE":
+        return session, account_data, history, "Type DELETE exactly to confirm account deletion.", gr.update(), gr.update(), gr.update(), gr.update()
+    if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
+        return session, account_data, history, "Unlock Parent tools again before deleting this account.", gr.update(), gr.update(), gr.update(), gr.update()
+    success, status = account_store.delete_user_account(session, password)
+    if not success:
+        return session, account_data, history, status, gr.update(), gr.update(), gr.update(), gr.update()
+    return None, account_store.default_user_memory(), [], status, gr.update(visible=True), gr.update(visible=False), None, None
 
 
 def sign_out_account(session):
@@ -1787,6 +1827,15 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                 gr.Markdown("### Parent dashboard")
                 refresh_dashboard_button = gr.Button("Refresh parent dashboard")
                 parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
+                gr.Markdown("### Privacy and account controls")
+                export_data_button = gr.Button("Export my XEMEX data")
+                data_export_file = gr.File(label="Your data export", interactive=False)
+                data_export_status = gr.Markdown("Export includes account memory and linked student account data, excluding password hashes.")
+                gr.Markdown("#### Delete account permanently")
+                delete_account_password = gr.Textbox(label="Confirm your current account password", type="password")
+                delete_account_confirmation = gr.Textbox(label='Type DELETE to confirm')
+                delete_account_button = gr.Button("Permanently delete my XEMEX account", variant="stop")
+                delete_account_status = gr.Markdown("Account deletion requires parent-tools unlock and password confirmation. Linked student records are deleted with the parent account.")
                 gr.Markdown("### Parent safety controls")
                 parent_allow_chat = gr.Checkbox(label="Allow student chat", value=True)
                 parent_allow_practice = gr.Checkbox(label="Allow practice activities", value=True)
@@ -1923,6 +1972,16 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         unlock_parent_tools,
         inputs=[parent_reauth_password, session_state],
         outputs=[parent_access_state, parent_reauth_status, session_state, parent_tools_column, parent_lock_column],
+    )
+    export_data_button.click(
+        export_account_data,
+        inputs=[session_state],
+        outputs=[data_export_file, data_export_status],
+    )
+    delete_account_button.click(
+        delete_account_from_settings,
+        inputs=[delete_account_password, delete_account_confirmation, session_state, parent_access_state, account_memory_state, chatbot],
+        outputs=[session_state, account_memory_state, chatbot, delete_account_status, login_panel, chat_panel, student_access_state, parent_access_state],
     )
     account_memory_state.change(
         learner_profile_choices,
