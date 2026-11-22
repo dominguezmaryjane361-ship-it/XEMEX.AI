@@ -43,6 +43,23 @@ class StudentAccountSecurityTests(unittest.TestCase):
         finally:
             student_accounts.SESSION_SECRET = original_secret
 
+    def test_missing_session_secret_fails_closed(self):
+        original_secret = student_accounts.SESSION_SECRET
+        student_accounts.SESSION_SECRET = b""
+        try:
+            self.assertIsNone(student_accounts.validate_student_session({
+                "token": "invalid", "student_id": "x",
+                "parent_user_id": "y", "learner_id": "z",
+            }))
+            with self.assertRaises(RuntimeError):
+                student_accounts._issue_session({
+                    "id": "student-id",
+                    "parent_user_id": "parent-id",
+                    "learner_id": "learner-id",
+                })
+        finally:
+            student_accounts.SESSION_SECRET = original_secret
+
     def test_username_rules(self):
         self.assertIsNotNone(student_accounts.USERNAME_RE.fullmatch("sam.student-2"))
         self.assertIsNone(student_accounts.USERNAME_RE.fullmatch("ab"))
