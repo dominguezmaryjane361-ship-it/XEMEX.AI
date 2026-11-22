@@ -1225,54 +1225,54 @@ with gr.Blocks(title="XEMEX.AI") as app:
         )
         with gr.Column(visible=False) as parent_tools_column:
             with gr.Accordion("Parent tools", open=False):
-            tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
-            learner_age_group = gr.Dropdown(
-                choices=[
-                    ("Preschool (3–5)", "preschool"),
-                    ("Early elementary (6–8)", "early_elementary"),
-                    ("Elementary (9–12)", "elementary"),
-                    ("Teen (13–17)", "teen"),
-                ],
-                value="elementary",
-                label="Learner age group",
-            )
-            learner_subject = gr.Textbox(label="Subject", value="General learning")
-            learner_goal = gr.Textbox(label="Learning goal", value="Understand the topic")
-            lesson_topic = gr.Textbox(label="Start a lesson on", placeholder="For example: fractions, reading, or planets")
-            lesson_button = gr.Button("Create an interactive lesson")
-            gr.Markdown("### Learner profiles")
-            learner_name_input = gr.Textbox(label="New learner name or nickname", placeholder="For example: Student 1")
-            create_learner_button = gr.Button("Create learner profile")
-            learner_profile = gr.Dropdown(label="Active learner profile", choices=[], value=None)
-            learner_profile_status = gr.Markdown("Create a profile for each child or teen. Profiles and progress are private to this account.")
-            gr.Markdown("### Learning progress")
-            progress_topic = gr.Textbox(label="Topic", placeholder="For example: fractions")
-            progress_skill = gr.Textbox(label="Skill observed", placeholder="For example: adding fractions with like denominators")
-            progress_performance = gr.Dropdown(
-                choices=["mastered", "developing", "needs practice", "not yet assessed"],
-                value="not yet assessed",
-                label="Observed performance",
-            )
-            progress_notes = gr.Textbox(label="Notes (optional)", lines=2)
-            with gr.Row():
-                save_progress_button = gr.Button("Save learning check")
-                summarize_progress_button = gr.Button("Summarize progress")
-            progress_status = gr.Markdown("Progress is saved privately to the signed-in account.")
-            gr.Markdown("### Parent dashboard")
-            refresh_dashboard_button = gr.Button("Refresh parent dashboard")
-            parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
-            gr.Markdown("### Parent safety controls")
-            parent_allow_practice = gr.Checkbox(label="Allow practice activities", value=True)
-            parent_allow_hints = gr.Checkbox(label="Allow hints", value=True)
-            parent_daily_limit = gr.Dropdown(
-                choices=[("5 activities per day", "5"), ("10 activities per day", "10"),
-                         ("15 activities per day", "15"), ("20 activities per day", "20"),
-                         ("30 activities per day", "30"), ("No daily activity cap", "0")],
-                value="20",
-                label="Daily learning activity limit",
-            )
-            save_parent_controls_button = gr.Button("Save parent safety settings")
-            parent_controls_status = gr.Markdown("Settings apply to the selected learner's practice and hint activities.")
+                tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
+                learner_age_group = gr.Dropdown(
+                    choices=[
+                        ("Preschool (3–5)", "preschool"),
+                        ("Early elementary (6–8)", "early_elementary"),
+                        ("Elementary (9–12)", "elementary"),
+                        ("Teen (13–17)", "teen"),
+                    ],
+                    value="elementary",
+                    label="Learner age group",
+                )
+                learner_subject = gr.Textbox(label="Subject", value="General learning")
+                learner_goal = gr.Textbox(label="Learning goal", value="Understand the topic")
+                lesson_topic = gr.Textbox(label="Start a lesson on", placeholder="For example: fractions, reading, or planets")
+                lesson_button = gr.Button("Create an interactive lesson")
+                gr.Markdown("### Learner profiles")
+                learner_name_input = gr.Textbox(label="New learner name or nickname", placeholder="For example: Student 1")
+                create_learner_button = gr.Button("Create learner profile")
+                learner_profile = gr.Dropdown(label="Active learner profile", choices=[], value=None)
+                learner_profile_status = gr.Markdown("Create a profile for each child or teen. Profiles and progress are private to this account.")
+                gr.Markdown("### Learning progress")
+                progress_topic = gr.Textbox(label="Topic", placeholder="For example: fractions")
+                progress_skill = gr.Textbox(label="Skill observed", placeholder="For example: adding fractions with like denominators")
+                progress_performance = gr.Dropdown(
+                    choices=["mastered", "developing", "needs practice", "not yet assessed"],
+                    value="not yet assessed",
+                    label="Observed performance",
+                )
+                progress_notes = gr.Textbox(label="Notes (optional)", lines=2)
+                with gr.Row():
+                    save_progress_button = gr.Button("Save learning check")
+                    summarize_progress_button = gr.Button("Summarize progress")
+                progress_status = gr.Markdown("Progress is saved privately to the signed-in account.")
+                gr.Markdown("### Parent dashboard")
+                refresh_dashboard_button = gr.Button("Refresh parent dashboard")
+                parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
+                gr.Markdown("### Parent safety controls")
+                parent_allow_practice = gr.Checkbox(label="Allow practice activities", value=True)
+                parent_allow_hints = gr.Checkbox(label="Allow hints", value=True)
+                parent_daily_limit = gr.Dropdown(
+                    choices=[("5 activities per day", "5"), ("10 activities per day", "10"),
+                             ("15 activities per day", "15"), ("20 activities per day", "20"),
+                             ("30 activities per day", "30"), ("No daily activity cap", "0")],
+                    value="20",
+                    label="Daily learning activity limit",
+                )
+                save_parent_controls_button = gr.Button("Save parent safety settings")
+                parent_controls_status = gr.Markdown("Settings apply to the selected learner's practice and hint activities.")
         with gr.Column(visible=True) as student_workspace_column:
             gr.Markdown("## Your learning space")
             gr.Markdown("Welcome! Choose something you want to learn. You can practice, ask for a hint, or talk with XEMEX.")
