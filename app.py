@@ -771,6 +771,7 @@ def create_account(email, password, setup_for, learner_age, learner_name):
             "age_group": _age_group_for_years(age),
             "is_self": False,
             "parent_controls": {
+                "allow_chat": True,
                 "allow_practice": True,
                 "allow_hints": True,
                 "daily_activity_limit": 20,
@@ -863,6 +864,11 @@ def independent_student_chat(message, history, student_session, student_memory, 
         return history, "", student_memory, "Enter a message first."
     if not student_accounts.validate_student_session(student_session):
         return history, "", student_memory, "Your student session expired. Sign in again."
+    controls, control_status = student_accounts.get_student_parent_controls(student_session)
+    if not controls:
+        return history, "", student_memory, control_status
+    if not controls.get("allow_chat", True):
+        return history, "", student_memory, "A parent has paused chat for this learner. Please speak with your parent or guardian."
     memory = student_memory if isinstance(student_memory, dict) else {}
     profile = memory.get("profile") if isinstance(memory.get("profile"), dict) else {}
     age_group = str(profile.get("age_group", "elementary"))[:40]
@@ -993,7 +999,7 @@ def _parent_control_status(account_data, learner_id, activity_type):
     return ""
 
 
-def save_parent_controls(learner_id, allow_practice, allow_hints, daily_limit, session, account_data):
+def save_parent_controls(learner_id, allow_chat, allow_practice, allow_hints, daily_limit, session, account_data):
     session, session_status = _renew_account_session(session)
     if not session:
         return account_data, session_status, None
@@ -1012,6 +1018,7 @@ def save_parent_controls(learner_id, allow_practice, allow_hints, daily_limit, s
     if daily_limit not in (0, 5, 10, 15, 20, 30):
         daily_limit = 20
     learner["parent_controls"] = {
+        "allow_chat": bool(allow_chat),
         "allow_practice": bool(allow_practice),
         "allow_hints": bool(allow_hints),
         "daily_activity_limit": daily_limit,
@@ -1029,6 +1036,7 @@ def load_parent_controls(learner_id, account_data):
     )
     controls = (learner or {}).get("parent_controls") or {}
     return (
+        controls.get("allow_chat", True),
         controls.get("allow_practice", True),
         controls.get("allow_hints", True),
         str(controls.get("daily_activity_limit", 20)),
@@ -1065,6 +1073,7 @@ def create_learner_profile(name, learner_age, session, account_data):
         "age": age,
         "age_group": _age_group_for_years(age),
         "parent_controls": {
+            "allow_chat": True,
             "allow_practice": True,
             "allow_hints": True,
             "daily_activity_limit": 20,
@@ -1489,6 +1498,9 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
         saved, save_status = account_store.save_user_memory(session, account_data)
         return updated_history, "", account_data, save_status if saved else "Safety response shown; saving needs attention: " + save_status, session
 
+    if learner_profile and (learner_profile.get("parent_controls") or {}).get("allow_chat", True) is not True:
+        return history, "", account_data, "A parent has paused chat for this learner. Please speak with your parent or guardian.", session
+
     emotion = detect_emotion(message)
     state = account_data.get("emotional_state", {})
     changes = {
@@ -1768,6 +1780,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                 refresh_dashboard_button = gr.Button("Refresh parent dashboard")
                 parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
                 gr.Markdown("### Parent safety controls")
+                parent_allow_chat = gr.Checkbox(label="Allow student chat", value=True)
                 parent_allow_practice = gr.Checkbox(label="Allow practice activities", value=True)
                 parent_allow_hints = gr.Checkbox(label="Allow hints", value=True)
                 parent_daily_limit = gr.Dropdown(
@@ -1977,12 +1990,12 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     learner_profile.change(
         load_parent_controls,
         inputs=[learner_profile, account_memory_state],
-        outputs=[parent_allow_practice, parent_allow_hints, parent_daily_limit],
+        outputs=[parent_allow_chat, parent_allow_practice, parent_allow_hints, parent_daily_limit],
     )
     save_parent_controls_button.click(
         save_parent_controls,
         inputs=[
-            learner_profile, parent_allow_practice, parent_allow_hints,
+            learner_profile, parent_allow_chat, parent_allow_practice, parent_allow_hints,
             parent_daily_limit, session_state, account_memory_state,
         ],
         outputs=[account_memory_state, parent_controls_status, session_state],
