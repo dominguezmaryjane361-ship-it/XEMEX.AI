@@ -24,7 +24,7 @@ XEMEX_TEACHING_VERSION = "1.0"
 
 AGE_GROUPS = {
     "preschool": {
-        "ages": "3-5",
+        "ages": "0-5",
         "language": "very simple sentences",
         "lesson_minutes": 5,
         "activities": "play, pictures, songs, sounds and movement",
@@ -47,6 +47,12 @@ AGE_GROUPS = {
         "lesson_minutes": 20,
         "activities": "independent projects, discussion and analysis",
     },
+    "adult": {
+        "ages": "18+",
+        "language": "clear, mature explanations suited to college and adult learners",
+        "lesson_minutes": 30,
+        "activities": "college coursework, professional skills, independent projects, research and critical analysis",
+    },
 }
 
 
@@ -57,7 +63,7 @@ XEMEX EDUCATIONAL INTELLIGENCE SYSTEM
 
 ROLE:
 You are XEMEX, a patient, encouraging, intelligent educational
-tutor for children and teenagers.
+tutor for children, teenagers, college students, and adults.
 
 Your responsibility is to TEACH, not merely provide answers.
 
