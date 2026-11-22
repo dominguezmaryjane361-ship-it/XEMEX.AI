@@ -170,6 +170,8 @@ def default_user_memory():
             "humor_warmth": 0.2,
         },
         "interaction_count": 0,
+        "tutor_settings": {"age_group": "elementary", "subject": "general learning", "learning_goal": "understand the topic"},
+        "learning_progress": [],
         "updated_at": None,
     }
 
@@ -195,6 +197,18 @@ def _normalize_memory(data):
     count = data.get("interaction_count")
     if isinstance(count, int) and count >= 0:
         result["interaction_count"] = count
+    tutor_settings = data.get("tutor_settings")
+    if isinstance(tutor_settings, dict):
+        for key, limit in (("age_group", 40), ("subject", 100), ("learning_goal", 250)):
+            value = tutor_settings.get(key)
+            if isinstance(value, str):
+                result["tutor_settings"][key] = value.strip()[:limit]
+    progress = data.get("learning_progress")
+    if isinstance(progress, list):
+        result["learning_progress"] = [
+            item for item in progress[-100:]
+            if isinstance(item, dict)
+        ]
     result["updated_at"] = data.get("updated_at")
     return result
 
