@@ -1112,7 +1112,11 @@ def build_parent_dashboard(session, account_data, learner_id=None):
         item for item in account_data.get("learning_progress", [])
         if item.get("learner_id") == learner_id
     ]
+    student_records, student_status = student_accounts.get_parent_student_progress(session, learner_id)
+    records.extend(student_records)
     lessons = [item for item in records if item.get("status") == "introduced"]
+    student_practice_count = sum(1 for item in student_records if item.get("status") == "introduced")
+    student_hint_count = sum(1 for item in student_records if item.get("status") == "hint_requested")
     checks = [item for item in records if item.get("status") == "parent_or_tutor_observation"]
     counts = {"mastered": 0, "developing": 0, "needs practice": 0, "not yet assessed": 0}
     for item in checks:
@@ -1131,6 +1135,8 @@ def build_parent_dashboard(session, account_data, learner_id=None):
         "",
         "### At a glance",
         "- Lessons introduced: **" + str(len(lessons)) + "**",
+        "- Student practice activities: **" + str(student_practice_count) + "**",
+        "- Student hints requested: **" + str(student_hint_count) + "**",
         "- Learning checks recorded: **" + str(len(checks)) + "**",
         "- Marked mastered: **" + str(counts["mastered"]) + "**",
         "- Developing: **" + str(counts["developing"]) + "**",
@@ -1148,8 +1154,12 @@ def build_parent_dashboard(session, account_data, learner_id=None):
         ])
         for item in recent:
             is_check = item.get("status") == "parent_or_tutor_observation"
-            kind = "Learning check" if is_check else "Lesson introduced"
-            result = safe(item.get("performance")) if is_check else "Introduced"
+            status_value = item.get("status")
+            kind = ("Learning check" if is_check else
+                    "Hint requested" if status_value == "hint_requested" else
+                    "Student practice" if status_value == "introduced" and "learner_id" not in item else
+                    "Lesson introduced")
+            result = safe(item.get("performance")) if is_check else ("Hint requested" if status_value == "hint_requested" else "Introduced")
             skill = safe(item.get("skill")) if is_check else result
             date = safe(str(item.get("timestamp") or "")[:10])
             lines.append(
@@ -1159,7 +1169,7 @@ def build_parent_dashboard(session, account_data, learner_id=None):
     lines.extend([
         "",
         "_This dashboard reports lessons and observations entered by a parent or tutor. "
-        "It does not independently test a learner or diagnose a learning condition._",
+        "Student practice and hint records are shown separately from parent/tutor observations. "\n        "It does not independently test a learner or diagnose a learning condition._",
     ])
     return "\n".join(lines), session
 
