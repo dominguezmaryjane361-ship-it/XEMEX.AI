@@ -174,6 +174,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 MEMORY_FILE = os.environ.get("MEMORY_FILE", "xemex_brain.json")
 HEARTBEAT_SECONDS = max(60, int(os.environ.get("HEARTBEAT_SECONDS", "3600")))
@@ -225,9 +226,11 @@ def fresh_memory():
 
 supabase = None
 
-if create_client and SUPABASE_URL and SUPABASE_KEY:
+if create_client and SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY):
     try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # This client is server-side only and is used for shared system memory.
+        # Account memory continues to use each user's own JWT and RLS policies.
+        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY)
         print("XEMEX: Supabase client initialized.")
     except Exception as error:
         print("Supabase connection warning:", error)
