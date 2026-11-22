@@ -55,11 +55,26 @@ class AccountMemoryTests(unittest.TestCase):
         self.assertEqual(
             data["learners"],
             [
-                {"id": "learner-1", "name": "Student One", "age_group": "early_elementary"},
-                {"id": "learner-3", "name": "Student Three", "age_group": "teen"},
+                {"id": "learner-1", "name": "Student One", "age_group": "early_elementary",
+                 "parent_controls": {"allow_practice": True, "allow_hints": True, "daily_activity_limit": 20}},
+                {"id": "learner-3", "name": "Student Three", "age_group": "teen",
+                 "parent_controls": {"allow_practice": True, "allow_hints": True, "daily_activity_limit": 20}},
             ],
         )
         self.assertEqual(len(data["learning_progress"]), 2)
+
+    def test_parent_controls_are_validated_and_defaulted(self):
+        data = account_memory._normalize_memory({
+            "learners": [
+                {"id": "learner-1", "name": "Student One", "age_group": "teen",
+                 "parent_controls": {"allow_practice": False, "allow_hints": "no",
+                                     "daily_activity_limit": 999}}
+            ]
+        })
+        controls = data["learners"][0]["parent_controls"]
+        self.assertFalse(controls["allow_practice"])
+        self.assertTrue(controls["allow_hints"])
+        self.assertEqual(controls["daily_activity_limit"], 20)
 
     @patch.object(account_memory, "refresh_session")
     @patch.object(account_memory.time, "time", return_value=2000)
