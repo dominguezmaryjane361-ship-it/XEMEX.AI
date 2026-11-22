@@ -346,7 +346,6 @@ def ask_llm(messages, temperature=0.7):
     messages = normalized_messages
 
     if not GROQ_API_KEY:
-    if not GROQ_API_KEY:
         return (
             "XEMEX is not connected to Groq yet. Add GROQ_API_KEY "
             "in your Render environment variables, then redeploy."
