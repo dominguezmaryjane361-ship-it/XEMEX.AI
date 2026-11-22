@@ -279,6 +279,8 @@ def _normalize_memory(data):
                 "id": learner_id,
                 "name": learner_name,
                 "age_group": age_group,
+                "age": (learner.get("age") if isinstance(learner.get("age"), int) and not isinstance(learner.get("age"), bool) and 0 <= learner.get("age") <= 120 else None),
+                "is_self": learner.get("is_self") is True,
                 "student_pin": pin_record,
                 "pin_failed_attempts": min(attempts, 5),
                 "pin_locked_until": max(0, float(locked_until)),
