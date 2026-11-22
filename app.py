@@ -1262,15 +1262,36 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     if control_message:
         return history, account_data, control_message, topic, session
 
+    urgent_reply = crisis_response(topic)
+    if urgent_reply:
+        history = history + [{"role": "assistant", "content": urgent_reply}]
+        account_data.setdefault("chat_history", []).append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user": topic,
+            "assistant": urgent_reply,
+        })
+        account_data["chat_history"] = account_data["chat_history"][-100:]
+        saved, status = account_store.save_user_memory(session, account_data)
+        return history, account_data, status if saved else "Safety response shown; saving needs attention: " + status, "", session
+
+    learner = next(
+        (item for item in account_data.get("learners", []) if item.get("id") == learner_id),
+        None,
+    )
+    effective_age_group = (learner or {}).get("age_group", age_group or "elementary")
     account_data["tutor_settings"] = {
         "age_group": str(age_group or "elementary")[:40],
         "subject": str(subject or "general learning")[:100],
         "learning_goal": str(topic)[:250],
     }
-    prompt = build_lesson_prompt(
-        subject=subject or "general learning",
-        topic=topic,
-        age_group=age_group or "elementary",
+    prompt = (
+        build_student_safety_prompt(effective_age_group, "tutor")
+        + "\n\n"
+        + build_lesson_prompt(
+            subject=subject or "general learning",
+            topic=topic,
+            age_group=effective_age_group,
+        )
     )
     reply = ask_llm(prompt)
     if reply.startswith(("Groq returned HTTP", "I couldn't reach", "XEMEX is not connected")):
