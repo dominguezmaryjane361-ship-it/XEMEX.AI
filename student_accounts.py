@@ -246,6 +246,26 @@ def get_student_parent_controls(student_session):
         return None, "Could not load parent settings: " + str(error)[:200]
 
 
+def get_parent_student_progress(parent_session, learner_id):
+    parent_session, _ = parent_store.ensure_valid_session(parent_session)
+    if not parent_session:
+        return [], "Parent session expired. Sign in again."
+    try:
+        rows = _request("GET", "student_accounts", params={
+            "parent_user_id": "eq." + parent_session["user_id"],
+            "learner_id": "eq." + str(learner_id),
+            "select": "memory_data",
+            "limit": "1",
+        })
+        if not rows:
+            return [], "No independent student login is linked to this learner."
+        memory = rows[0].get("memory_data") or {}
+        records = memory.get("learning_progress", [])
+        return ([item for item in records if isinstance(item, dict)], "Student progress loaded.")
+    except (RuntimeError, requests.RequestException) as error:
+        return [], "Could not load student progress: " + str(error)[:180]
+
+
 def load_student_memory(student_session):
     payload = validate_student_session(student_session)
     if not payload:
@@ -284,7 +304,10 @@ def save_student_memory(student_session, memory):
             safe[key] = [item for item in value[-100:] if isinstance(item, (dict, str))]
     profile = memory.get("profile")
     if isinstance(profile, dict):
-        safe["profile"].update({k: str(profile.get(k) or "")[:100] for k in ("username", "email")})
+        safe["profile"].update({
+            k: str(profile.get(k) or "")[:100]
+            for k in ("username", "email", "learner_name", "age_group")
+        })
     count = memory.get("interaction_count", 0)
     safe["interaction_count"] = max(0, count) if isinstance(count, int) else 0
     safe["updated_at"] = datetime.now(timezone.utc).isoformat()
