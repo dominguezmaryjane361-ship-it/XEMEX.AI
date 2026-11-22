@@ -311,6 +311,41 @@ with memory_lock:
 # =========================================================
 
 def ask_llm(messages, temperature=0.7):
+    """
+    Shared Groq gateway.
+    Accepts both chat-message lists and plain text prompts.
+    """
+    if isinstance(messages, str):
+        prompt = messages.strip()
+
+        if not prompt:
+            return "Please provide a prompt."
+
+        messages = [{"role": "user", "content": prompt}]
+
+    if not isinstance(messages, list) or not messages:
+        return "The AI request must contain a prompt or a non-empty message list."
+
+    normalized_messages = []
+
+    for item in messages:
+        if not isinstance(item, dict):
+            return "Each AI message must be a role/content dictionary."
+
+        role = item.get("role")
+        content = item.get("content")
+
+        if role not in ("system", "user", "assistant") or not isinstance(content, str):
+            return "Each AI message must have a valid role and text content."
+
+        normalized_messages.append({
+            "role": role,
+            "content": content
+        })
+
+    messages = normalized_messages
+
+    if not GROQ_API_KEY:
     if not GROQ_API_KEY:
         return (
             "XEMEX is not connected to Groq yet. Add GROQ_API_KEY "
