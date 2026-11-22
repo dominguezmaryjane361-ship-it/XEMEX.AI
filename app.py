@@ -681,6 +681,10 @@ def sign_in_account(email, password):
     return _authenticate_account(email, password, False)
 
 
+def send_password_reset(email):
+    return account_store.request_password_reset(email)
+
+
 def sign_in_self_student_account(email, password):
     result = _authenticate_account(email, password, False)
     session = result[0]
@@ -1679,6 +1683,8 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             password_input = gr.Textbox(label="Password", type="password")
             with gr.Row():
                 sign_in_button = gr.Button("Sign in", variant="primary")
+                parent_password_reset_button = gr.Button("Forgot password?")
+            parent_password_reset_status = gr.Markdown("")
             gr.Markdown("### Create a XEMEX account")
             registration_setup_for = gr.Radio(
                 choices=[("For myself", "self"), ("For my child", "child")],
@@ -1706,6 +1712,8 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             student_self_age = gr.Number(label="Your age in years", precision=0, minimum=13, maximum=120)
             student_self_create_button = gr.Button("Create my student account")
             student_self_signin_button = gr.Button("Sign in to my student account")
+            student_password_reset_button = gr.Button("Forgot student password?")
+            student_password_reset_status = gr.Markdown("")
             student_back_button = gr.Button("Back")
 
     with gr.Column(visible=False) as independent_student_panel:
@@ -1859,6 +1867,11 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         inputs=[session_state, account_memory_state],
         outputs=[student_access_state, student_lock_column, student_workspace_column, student_profile, learner_age_group],
     )
+    parent_password_reset_button.click(
+        send_password_reset,
+        inputs=[email_input],
+        outputs=[parent_password_reset_status],
+    )
     independent_student_login_button.click(
         sign_in_independent_student,
         inputs=[independent_student_identifier, independent_student_password],
@@ -1885,6 +1898,11 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         restore_self_learner,
         inputs=[session_state, account_memory_state],
         outputs=[student_access_state, student_lock_column, student_workspace_column, student_profile, learner_age_group],
+    )
+    student_password_reset_button.click(
+        send_password_reset,
+        inputs=[student_self_email],
+        outputs=[student_password_reset_status],
     )
     create_account_button.click(
         create_account,
