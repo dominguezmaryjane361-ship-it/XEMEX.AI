@@ -867,6 +867,13 @@ def sign_out_account_and_lock_student(session):
 
 
 
+def _parent_access_valid(parent_access, session):
+    return (
+        isinstance(parent_access, dict)
+        and parent_access.get("account_user_id") == (session or {}).get("user_id")
+    )
+
+
 def create_independent_student_login(learner_id, username, email, password, session, parent_access):
     if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
         return "Unlock Parent view again before creating student sign-ins.", session
@@ -1043,10 +1050,12 @@ def _parent_control_status(account_data, learner_id, activity_type):
     return ""
 
 
-def save_parent_controls(learner_id, allow_chat, allow_practice, allow_hints, daily_limit, session, account_data):
+def save_parent_controls(learner_id, allow_chat, allow_practice, allow_hints, daily_limit, session, account_data, parent_access):
     session, session_status = _renew_account_session(session)
     if not session:
         return account_data, session_status, None
+    if not _parent_access_valid(parent_access, session):
+        return account_data, "Unlock Parent tools again before changing parent settings.", session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
     learner = next(
@@ -1087,10 +1096,12 @@ def load_parent_controls(learner_id, account_data):
     )
 
 
-def create_learner_profile(name, learner_age, session, account_data):
+def create_learner_profile(name, learner_age, session, account_data, parent_access):
     session, session_status = _renew_account_session(session)
     if not session:
         return account_data, gr.update(), session_status, None
+    if not _parent_access_valid(parent_access, session):
+        return account_data, gr.update(), "Unlock Parent tools again before creating learner profiles.", session
     name = str(name or "").strip()[:80]
     if not name:
         return account_data, gr.update(), "Enter a learner name or nickname.", session
@@ -1133,10 +1144,12 @@ def create_learner_profile(name, learner_age, session, account_data):
 
 
 
-def set_learner_student_pin(learner_id, pin, confirm_pin, session, account_data):
+def set_learner_student_pin(learner_id, pin, confirm_pin, session, account_data, parent_access):
     session, status = _renew_account_session(session)
     if not session:
         return account_data, status, session
+    if not _parent_access_valid(parent_access, session):
+        return account_data, "Unlock Parent tools again before changing a student PIN.", session
     if str(pin or "") != str(confirm_pin or ""):
         return account_data, "The two PIN entries do not match.", session
     try:
@@ -1228,12 +1241,14 @@ def select_learner_profile(learner_id, account_data):
     return "elementary", "Choose or create a learner profile. Existing account progress remains available."
 
 
-def start_tutoring_lesson(topic, history, session, account_data, age_group, subject, learner_id=None):
+def start_tutoring_lesson(topic, history, session, account_data, age_group, subject, learner_id=None, parent_access=None):
     history = history or []
     topic = (topic or "").strip()
     session, session_status = _renew_account_session(session)
     if not session:
         return history, account_data, session_status, topic, None
+    if not _parent_access_valid(parent_access, session):
+        return history, account_data, "Unlock Parent tools again before creating a lesson.", topic, session
     if not topic:
         return history, account_data, "Enter a topic for the lesson first.", topic, session
     if not isinstance(account_data, dict):
@@ -1278,10 +1293,12 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     return history, account_data, status, "", session
 
 
-def record_account_learning_progress(topic, skill, performance, notes, session, account_data, age_group, subject, learner_id=None):
+def record_account_learning_progress(topic, skill, performance, notes, session, account_data, age_group, subject, learner_id=None, parent_access=None):
     session, session_status = _renew_account_session(session)
     if not session:
         return account_data, session_status, None
+    if not _parent_access_valid(parent_access, session):
+        return account_data, "Unlock Parent tools again before recording learning observations.", session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
 
@@ -1313,10 +1330,12 @@ def record_account_learning_progress(topic, skill, performance, notes, session, 
     return account_data, "Learning check saved privately to this account.", session
 
 
-def build_parent_dashboard(session, account_data, learner_id=None):
+def build_parent_dashboard(session, account_data, learner_id=None, parent_access=None):
     session, session_status = _renew_account_session(session)
     if not session:
         return session_status, None
+    if not _parent_access_valid(parent_access, session):
+        return "Unlock Parent tools again before viewing the parent dashboard.", session
     account_data = account_data if isinstance(account_data, dict) else {}
     learners = account_data.get("learners", [])
     learner = next((item for item in learners if item.get("id") == learner_id), None)
@@ -1390,10 +1409,12 @@ def build_parent_dashboard(session, account_data, learner_id=None):
     return "\n".join(lines), session
 
 
-def summarize_account_learning_progress(session, account_data, learner_id=None):
+def summarize_account_learning_progress(session, account_data, learner_id=None, parent_access=None):
     session, session_status = _renew_account_session(session)
     if not session:
         return session_status, None
+    if not _parent_access_valid(parent_access, session):
+        return "Unlock Parent tools again before summarizing learner progress.", session
     records = (account_data or {}).get("learning_progress", [])
     if learner_id:
         records = [item for item in records if item.get("learner_id") == learner_id]
