@@ -1636,7 +1636,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             with gr.Accordion("Parent tools", open=False):
                 tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
                 learner_age_group = gr.Dropdown(                    choices=[
-                        ("Preschool (3–5)", "preschool"),
+                        ("Early childhood (0–5)", "preschool"),
                         ("Early elementary (6–8)", "early_elementary"),
                         ("Elementary (9–12)", "elementary"),
                         ("Teen (13–17)", "teen"),
