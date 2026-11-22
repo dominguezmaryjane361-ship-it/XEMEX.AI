@@ -817,10 +817,12 @@ def create_account(email, password, setup_for, learner_age, learner_name):
     return tuple(result)
 
 
-def export_account_data(session):
+def export_account_data(session, parent_access):
     session, session_status = _renew_account_session(session)
     if not session:
         return None, session_status
+    if not _parent_access_valid(parent_access, session):
+        return None, "Unlock Parent tools again before exporting account data."
     account_data, memory_status = account_store.load_user_memory(session)
     linked_students, student_status = student_accounts.export_parent_student_data(session)
     payload = {
@@ -1996,7 +1998,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     export_data_button.click(
         export_account_data,
-        inputs=[session_state],
+        inputs=[session_state, parent_access_state],
         outputs=[data_export_file, data_export_status],
     )
     delete_account_button.click(
@@ -2016,7 +2018,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     save_student_pin_button.click(
         set_learner_student_pin,
-        inputs=[learner_profile, parent_pin_input, parent_pin_confirm, session_state, account_memory_state],
+        inputs=[learner_profile, parent_pin_input, parent_pin_confirm, session_state, account_memory_state, parent_access_state],
         outputs=[account_memory_state, student_pin_status, session_state],
     )
     create_student_login_button.click(
@@ -2054,30 +2056,30 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     lesson_button.click(
         start_tutoring_lesson,
-        inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject, learner_profile],
+        inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject, learner_profile, parent_access_state],
         outputs=[chatbot, account_memory_state, account_status, lesson_topic, session_state],
     )
     save_progress_button.click(
         record_account_learning_progress,
         inputs=[
             progress_topic, progress_skill, progress_performance, progress_notes,
-            session_state, account_memory_state, learner_age_group, learner_subject, learner_profile,
+            session_state, account_memory_state, learner_age_group, learner_subject, learner_profile, parent_access_state,
         ],
         outputs=[account_memory_state, progress_status, session_state],
     )
     summarize_progress_button.click(
         summarize_account_learning_progress,
-        inputs=[session_state, account_memory_state, learner_profile],
+        inputs=[session_state, account_memory_state, learner_profile, parent_access_state],
         outputs=[progress_status, session_state],
     )
     refresh_dashboard_button.click(
         build_parent_dashboard,
-        inputs=[session_state, account_memory_state, learner_profile],
+        inputs=[session_state, account_memory_state, learner_profile, parent_access_state],
         outputs=[parent_dashboard, session_state],
     )
     create_learner_button.click(
         create_learner_profile,
-        inputs=[learner_name_input, learner_creation_age, session_state, account_memory_state],
+        inputs=[learner_name_input, learner_creation_age, session_state, account_memory_state, parent_access_state],
         outputs=[account_memory_state, learner_profile, learner_profile_status, session_state],
     )
     learner_profile.change(
@@ -2094,7 +2096,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         save_parent_controls,
         inputs=[
             learner_profile, parent_allow_chat, parent_allow_practice, parent_allow_hints,
-            parent_daily_limit, session_state, account_memory_state,
+            parent_daily_limit, session_state, account_memory_state, parent_access_state,
         ],
         outputs=[account_memory_state, parent_controls_status, session_state],
     )
