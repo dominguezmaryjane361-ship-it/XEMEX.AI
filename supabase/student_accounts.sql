@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS public.student_accounts (
     password_salt TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     password_iterations INTEGER NOT NULL DEFAULT 310000,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until BIGINT NOT NULL DEFAULT 0,
     memory_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -26,6 +28,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS student_accounts_email_unique
     WHERE email IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS student_accounts_parent_learner_unique
     ON public.student_accounts (parent_user_id, learner_id);
+
+ALTER TABLE public.student_accounts ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.student_accounts ADD COLUMN IF NOT EXISTS locked_until BIGINT NOT NULL DEFAULT 0;
 
 ALTER TABLE public.student_accounts ENABLE ROW LEVEL SECURITY;
 
