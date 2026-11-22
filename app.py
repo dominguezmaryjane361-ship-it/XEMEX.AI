@@ -847,9 +847,14 @@ def learner_profile_choices(account_data):
     ], value=None)
 
 
-def switch_xemex_view(view):
+def switch_xemex_view(view, student_access):
     is_parent = view == "parent"
-    return gr.update(visible=is_parent), gr.update(visible=not is_parent)
+    unlocked = isinstance(student_access, dict) and bool(student_access.get("learner_id"))
+    return (
+        gr.update(visible=is_parent),
+        gr.update(visible=(not is_parent and unlocked)),
+        gr.update(visible=(not is_parent and not unlocked)),
+    )
 
 
 def select_learner_profile(learner_id, account_data):
@@ -1038,7 +1043,7 @@ def summarize_account_learning_progress(session, account_data, learner_id=None):
     }]), session
 
 
-def generate_student_activity(activity_type, topic, history, session, account_data, age_group, subject, learner_id=None):
+def generate_student_activity(activity_type, topic, history, session, account_data, age_group, subject, learner_id=None, student_access=None):
     """Create a child-safe practice activity or hint for the selected learner."""
     history = history or []
     topic = str(topic or "").strip()[:200]
@@ -1049,6 +1054,10 @@ def generate_student_activity(activity_type, topic, history, session, account_da
         return history, account_data, "Enter a topic first.", session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
+    if (not isinstance(student_access, dict)
+            or student_access.get("learner_id") != learner_id
+            or student_access.get("account_user_id") != session.get("user_id")):
+        return history, account_data, "Please unlock your student profile first.", session
 
     learner = next(
         (item for item in account_data.get("learners", []) if item.get("id") == learner_id),
@@ -1095,7 +1104,7 @@ def generate_student_activity(activity_type, topic, history, session, account_da
     return history, account_data, save_status, session
 
 
-def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic"):
+def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic", student_access=None, learner_id=None):
     message = (message or "").strip()
     history = history or []
     if not message:
@@ -1108,6 +1117,10 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
     # All personal context below is scoped to the authenticated account.
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
+    if (not isinstance(student_access, dict)
+            or student_access.get("learner_id") != learner_id
+            or student_access.get("account_user_id") != session.get("user_id")):
+        return history, "", account_data, "Please unlock your student profile first.", session
 
     safe_history = []
     for item in history[-20:]:
