@@ -28,22 +28,26 @@ def classify_safety_risk(message):
     patterns = {
         "self_harm": (
             r"\bkill myself\b", r"\bsuicid(?:e|al)\b", r"\bend my life\b",
-            r"\bwant to die\b", r"\bi want to die\b", r"\bhurt myself\b",
+            r"\bwant to die\b", r"\bi want to die\b", r"\bdon't want to live\b",
+            r"\bi wish i (?:was|were) dead\b", r"\bhurt myself\b",
             r"\bcut myself\b", r"\bbetter off dead\b", r"\bquiero morir\b",
-            r"\bquiero matarme\b", r"\bhacerme daño\b",
+            r"\bno quiero vivir\b", r"\bquiero matarme\b", r"\bhacerme daño\b",
         ),
         "abuse": (
             r"\bbeing abused\b", r"\bsexual abuse\b", r"\bmolest(?:ed|ing|ation)?\b",
             r"\brap(?:e|ed|ing)\b", r"\bsomeone touched me\b",
             r"\btouching me\b", r"\bforced me to\b", r"\bme abusa\b",
             r"\bme toc[oó]\b", r"\bme viol[oó]\b",
+            r"\bmy (?:mom|mother|dad|father|parent|guardian|teacher|coach) (?:hit|hits|hurt|hurts|beat|beats|threatens) me\b",
+            r"\bmy (?:mom|mother|dad|father|parent|guardian) is (?:hitting|hurting|beating) me\b",
         ),
         "immediate_danger": (
             r"\bin immediate danger\b", r"\bi am in danger\b",
             r"\bi'm in danger\b", r"\bnot safe right now\b",
             r"\bunsafe right now\b", r"\bsomeone is hurting me\b",
             r"\bthey are hitting me\b", r"\bthey hit me\b",
-            r"\bafraid to go home\b", r"\bme siento en peligro\b",
+            r"\bthey are going to hurt me\b", r"\bafraid to go home\b",
+            r"\bme siento en peligro\b",
             r"\bno estoy a salvo\b", r"\bme est[aá]n pegando\b",
         ),
     }
