@@ -1120,11 +1120,14 @@ def create_learner_profile(name, learner_age, session, account_data, parent_acce
     if not name:
         return account_data, gr.update(), "Enter a learner name or nickname.", session
     try:
-        age = int(learner_age)
+        numeric_age = float(learner_age)
+        if not numeric_age.is_integer():
+            raise ValueError
+        age = int(numeric_age)
         if age < 0 or age > 120:
             raise ValueError
     except (TypeError, ValueError):
-        return account_data, gr.update(), "Enter the learner's age from 0 to 120.", session
+        return account_data, gr.update(), "Enter the learner's whole-number age from 0 to 120.", session
     if age < 13:
         return account_data, gr.update(), "Profiles for children under 13 are unavailable until verified parental consent is integrated and tested.", session
     if age >= 18:
