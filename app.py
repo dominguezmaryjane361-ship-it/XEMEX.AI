@@ -707,19 +707,19 @@ def chat_with_xemex(message, history, session, account_data):
 
     # Remember a name only in the signed-in account's private profile.
     import re
-    name_match = re.search(r"\\bmy name is\\s+([A-Za-z][A-Za-z' -]{0,98})", message, re.IGNORECASE)
+    name_match = re.search(r"\bmy name is\s+([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,2})", message, re.IGNORECASE)
     if name_match:
         account_data.setdefault("profile", {})["name"] = name_match.group(1).strip().rstrip(" .,!")
 
     profile_name = account_data.get("profile", {}).get("name", "")
     facts = account_data.get("facts", [])
-    known_facts = "\\n".join("- " + str(item) for item in facts[-12:]) or "No saved facts yet."
+    known_facts = "\n".join("- " + str(item) for item in facts[-12:]) or "No saved facts yet."
     if profile_name:
-        known_facts = "- The user's name is " + profile_name + "\\n" + known_facts
+        known_facts = "- The user's name is " + profile_name + "\n" + known_facts
 
     with memory_lock:
         system_prompt = memory["system_prompt"]
-        discoveries = "\\n".join(str(item) for item in memory["learned_knowledge"][-5:]) or "No independent explorations yet."
+        discoveries = "\n".join(str(item) for item in memory["learned_knowledge"][-5:]) or "No independent explorations yet."
 
     lower_message = message.lower()
     coding_request = (
@@ -735,16 +735,16 @@ def chat_with_xemex(message, history, session, account_data):
         reply = generate_code(task or message)
     else:
         system_message = (
-            f"{system_prompt}\\n\\n"
-            f"Behavioral state (simulated, account-specific): {json.dumps(state)}\\n\\n"
-            f"Detected user-message emotion: {emotion}\\n\\n"
-            f"Remembered facts for this account only:\\n{known_facts}\\n\\n"
-            "IDENTITY ACCURACY:\\n"
-            "You are XEMEX.AI, running inside a Python application.\\n"
-            "Your capabilities depend on the tools and services actually connected.\\n"
-            "Never claim a fixed training cutoff unless it is verified.\\n"
-            "Never claim to remember information that is not supplied here.\\n\\n"
-            f"Recent general XEMEX explorations:\\n{discoveries}\\n\\n"
+            f"{system_prompt}\n\n"
+            f"Behavioral state (simulated, account-specific): {json.dumps(state)}\n\n"
+            f"Detected user-message emotion: {emotion}\n\n"
+            f"Remembered facts for this account only:\n{known_facts}\n\n"
+            "IDENTITY ACCURACY:\n"
+            "You are XEMEX.AI, running inside a Python application.\n"
+            "Your capabilities depend on the tools and services actually connected.\n"
+            "Never claim a fixed training cutoff unless it is verified.\n"
+            "Never claim to remember information that is not supplied here.\n\n"
+            f"Recent general XEMEX explorations:\n{discoveries}\n\n"
             "Do not reveal or infer information from another account. "
             "Use only the current account's supplied context for personal details."
         )
