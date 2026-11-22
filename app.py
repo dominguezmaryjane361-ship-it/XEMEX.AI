@@ -650,11 +650,11 @@ def _authenticate_account(email, password, create_account=False):
         session, status = account_store.sign_in(email, password)
 
     if not session:
-        return None, account_store.default_user_memory(), [], status, status, gr.update(visible=True), gr.update(visible=False)
+        return None, account_store.default_user_memory(), [], status, status, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic"
 
     account_data, memory_status = account_store.load_user_memory(session)
     restored = _restore_account_chat(account_data)
-    return session, account_data, restored, status + " " + memory_status, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True)
+    return session, account_data, restored, status + " " + memory_status, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True), account_data.get("tutor_settings", {}).get("age_group", "elementary"), account_data.get("tutor_settings", {}).get("subject", "General learning"), account_data.get("tutor_settings", {}).get("learning_goal", "Understand the topic")
 
 
 def sign_in_account(email, password):
@@ -667,7 +667,7 @@ def create_account(email, password):
 
 def sign_out_account(session):
     account_store.sign_out(session)
-    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False)
+    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic"
 
 
 def start_tutoring_lesson(topic, history, session, account_data, age_group, subject):
@@ -680,6 +680,11 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
 
+    account_data["tutor_settings"] = {
+        "age_group": str(age_group or "elementary")[:40],
+        "subject": str(subject or "general learning")[:100],
+        "learning_goal": str(topic)[:250],
+    }
     prompt = build_lesson_prompt(
         subject=subject or "general learning",
         topic=topic,
@@ -921,7 +926,8 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     auth_outputs = [
         session_state, account_memory_state, chatbot,
-        auth_status, account_status, login_panel, chat_panel
+        auth_status, account_status, login_panel, chat_panel,
+        learner_age_group, learner_subject, learner_goal
     ]
     sign_in_button.click(
         sign_in_account,
