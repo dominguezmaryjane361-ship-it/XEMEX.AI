@@ -35,6 +35,7 @@ from learning_support import (
 import requests
 import gradio as gr
 import account_memory as account_store
+from student_learning import build_student_activity_prompt
 
 
 # Optional web search
@@ -890,6 +891,61 @@ def summarize_account_learning_progress(session, account_data, learner_id=None):
     }]), session
 
 
+def generate_student_activity(activity_type, topic, history, session, account_data, age_group, subject, learner_id=None):
+    """Create a child-safe practice activity or hint for the selected learner."""
+    history = history or []
+    topic = str(topic or "").strip()[:200]
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return history, account_data, session_status, session
+    if not topic:
+        return history, account_data, "Enter a topic first.", session
+    if not isinstance(account_data, dict):
+        account_data = account_store.default_user_memory()
+
+    learner = next(
+        (item for item in account_data.get("learners", []) if item.get("id") == learner_id),
+        None,
+    )
+    if not learner:
+        return history, account_data, "Choose a learner profile before starting student activities.", session
+
+    learner_age = learner.get("age_group", age_group or "elementary")
+    activity = "hint" if activity_type == "hint" else "practice"
+    prompt = build_student_activity_prompt(
+        age_group=learner_age,
+        subject=subject or "general learning",
+        topic=topic,
+        activity=activity,
+    )
+    reply = ask_llm(prompt)
+    if reply.startswith(("Groq returned HTTP", "I couldn't reach", "XEMEX is not connected")):
+        return history, account_data, reply, session
+
+    label = "Get a hint for: " if activity == "hint" else "Start student practice: "
+    history = history + [{"role": "assistant", "content": reply}]
+    account_data.setdefault("chat_history", []).append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user": label + topic,
+        "assistant": reply,
+    })
+    account_data["chat_history"] = account_data["chat_history"][-100:]
+    if activity == "practice":
+        account_data.setdefault("learning_progress", []).append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "subject": str(subject or "general learning")[:100],
+            "topic": topic,
+            "age_group": str(learner_age)[:40],
+            "learner_id": str(learner_id)[:64],
+            "status": "introduced",
+        })
+        account_data["learning_progress"] = account_data["learning_progress"][-100:]
+    saved, save_status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        save_status = "Warning: " + save_status
+    return history, account_data, save_status, session
+
+
 def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic"):
     message = (message or "").strip()
     history = history or []
@@ -1114,6 +1170,13 @@ with gr.Blocks(title="XEMEX.AI") as app:
             gr.Markdown("### Parent dashboard")
             refresh_dashboard_button = gr.Button("Refresh parent dashboard")
             parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
+        with gr.Accordion("Student learning workspace", open=True):
+            gr.Markdown("A focused space for age-appropriate practice, helpful hints, and learning one step at a time.")
+            student_topic = gr.Textbox(label="What would you like to learn?", placeholder="For example: multiplication, planets, or reading")
+            with gr.Row():
+                student_practice_button = gr.Button("Start practice", variant="primary")
+                student_hint_button = gr.Button("Get a hint")
+            student_activity_status = gr.Markdown("Choose a learner profile above to begin.")
         chatbot = gr.Chatbot(label="Conversation", type="messages")
         message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
         with gr.Row():
@@ -1141,6 +1204,25 @@ with gr.Blocks(title="XEMEX.AI") as app:
     chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
     message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
+    student_activity_inputs = [
+        student_topic, chatbot, session_state, account_memory_state,
+        learner_age_group, learner_subject, learner_profile,
+    ]
+    student_activity_outputs = [chatbot, account_memory_state, student_activity_status, session_state]
+    student_practice_button.click(
+        lambda topic, history, session, data, age, subject, learner: generate_student_activity(
+            "practice", topic, history, session, data, age, subject, learner
+        ),
+        inputs=student_activity_inputs,
+        outputs=student_activity_outputs,
+    )
+    student_hint_button.click(
+        lambda topic, history, session, data, age, subject, learner: generate_student_activity(
+            "hint", topic, history, session, data, age, subject, learner
+        ),
+        inputs=student_activity_inputs,
+        outputs=student_activity_outputs,
+    )
     lesson_button.click(
         start_tutoring_lesson,
         inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject, learner_profile],
