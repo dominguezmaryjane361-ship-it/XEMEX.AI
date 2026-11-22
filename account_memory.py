@@ -172,6 +172,7 @@ def default_user_memory():
         "interaction_count": 0,
         "tutor_settings": {"age_group": "elementary", "subject": "general learning", "learning_goal": "understand the topic"},
         "learning_progress": [],
+        "learners": [],
         "updated_at": None,
     }
 
@@ -209,6 +210,25 @@ def _normalize_memory(data):
             item for item in progress[-100:]
             if isinstance(item, dict)
         ]
+    learners = data.get("learners")
+    if isinstance(learners, list):
+        cleaned_learners = []
+        seen_ids = set()
+        for learner in learners[-20:]:
+            if not isinstance(learner, dict):
+                continue
+            learner_id = str(learner.get("id") or "")[:64]
+            learner_name = str(learner.get("name") or "").strip()[:80]
+            age_group = str(learner.get("age_group") or "elementary")[:40]
+            if not learner_id or not learner_name or learner_id in seen_ids:
+                continue
+            seen_ids.add(learner_id)
+            cleaned_learners.append({
+                "id": learner_id,
+                "name": learner_name,
+                "age_group": age_group,
+            })
+        result["learners"] = cleaned_learners
     result["updated_at"] = data.get("updated_at")
     return result
 
