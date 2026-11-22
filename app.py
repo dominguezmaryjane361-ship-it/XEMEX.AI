@@ -1227,7 +1227,7 @@ def learner_profile_choices(account_data, current_learner_id):
 def switch_xemex_view(view, student_access, parent_access, session):
     is_parent = view == "parent"
     user_id = (session or {}).get("user_id")
-    parent_unlocked = isinstance(parent_access, dict) and parent_access.get("account_user_id") == user_id
+    parent_unlocked = _parent_access_valid(parent_access, session)
     student_unlocked = isinstance(student_access, dict) and student_access.get("account_user_id") == user_id
     return (
         gr.update(visible=(is_parent and parent_unlocked)),
