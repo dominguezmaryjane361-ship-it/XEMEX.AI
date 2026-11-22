@@ -1270,6 +1270,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     session_state = gr.State(value=None)
     account_memory_state = gr.State(value=account_store.default_user_memory())
+    student_access_state = gr.State(value=None)
 
     with gr.Column(visible=True) as login_panel:
         gr.Markdown("## Sign in or create an account")
@@ -1337,7 +1338,19 @@ with gr.Blocks(title="XEMEX.AI") as app:
                 )
                 save_parent_controls_button = gr.Button("Save parent safety settings")
                 parent_controls_status = gr.Markdown("Settings apply to the selected learner's practice and hint activities.")
-        with gr.Column(visible=True) as student_workspace_column:
+                gr.Markdown("### Student sign-in PIN")
+                parent_pin_input = gr.Textbox(label="Create a six-digit student PIN", type="password", max_lines=1)
+                parent_pin_confirm = gr.Textbox(label="Confirm student PIN", type="password", max_lines=1)
+                save_student_pin_button = gr.Button("Save student PIN")
+                student_pin_status = gr.Markdown("Set a PIN for the selected learner. Only a salted hash is stored.")
+        with gr.Column(visible=True) as student_lock_column:
+            gr.Markdown("## Student sign-in")
+            gr.Markdown("Choose your profile and enter the six-digit PIN your parent gave you.")
+            student_profile = gr.Dropdown(label="Your learner profile", choices=[], value=None)
+            student_pin_input = gr.Textbox(label="Six-digit PIN", type="password", max_lines=1)
+            unlock_student_button = gr.Button("Unlock my learning space", variant="primary")
+            student_lock_status = gr.Markdown("Ask a parent to create your profile and PIN if you are not set up yet.")
+        with gr.Column(visible=False) as student_workspace_column:
             gr.Markdown("## Your learning space")
             gr.Markdown("Welcome! Choose something you want to learn. You can practice, ask for a hint, or talk with XEMEX.")
             student_topic = gr.Textbox(label="What would you like to learn?", placeholder="For example: multiplication, planets, or reading")
@@ -1346,11 +1359,11 @@ with gr.Blocks(title="XEMEX.AI") as app:
                 student_hint_button = gr.Button("Get a hint")
             student_activity_status = gr.Markdown("Choose your learner profile in Parent view before starting.")
             chatbot = gr.Chatbot(label="Your learning conversation", type="messages")
-        message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
-        with gr.Row():
-            send_button = gr.Button("Send", variant="primary")
-            clear = gr.Button("Clear conversation")
-            sign_out_button = gr.Button("Sign out")
+            message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
+            with gr.Row():
+                send_button = gr.Button("Send", variant="primary")
+                clear = gr.Button("Clear conversation")
+        sign_out_button = gr.Button("Sign out")
 
     auth_outputs = [
         session_state, account_memory_state, chatbot,
@@ -1370,8 +1383,23 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     view_mode.change(
         switch_xemex_view,
-        inputs=[view_mode],
-        outputs=[parent_tools_column, student_workspace_column],
+        inputs=[view_mode, student_access_state],
+        outputs=[parent_tools_column, student_workspace_column, student_lock_column],
+    )
+    account_memory_state.change(
+        learner_profile_choices,
+        inputs=[account_memory_state],
+        outputs=[student_profile],
+    )
+    unlock_student_button.click(
+        unlock_student_workspace,
+        inputs=[student_profile, student_pin_input, session_state, account_memory_state],
+        outputs=[student_access_state, student_lock_status, session_state, student_workspace_column],
+    )
+    save_student_pin_button.click(
+        set_learner_student_pin,
+        inputs=[learner_profile, parent_pin_input, parent_pin_confirm, session_state, account_memory_state],
+        outputs=[account_memory_state, student_pin_status, session_state],
     )
     chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal]
     chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
