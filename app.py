@@ -36,6 +36,7 @@ import requests
 import gradio as gr
 import account_memory as account_store
 from student_learning import build_student_activity_prompt
+from student_access import make_pin_record, verify_pin
 
 
 # Optional web search
@@ -781,6 +782,69 @@ def create_learner_profile(name, age_group, session, account_data):
         return account_data, gr.update(), "Profile could not be saved: " + status, session
     choices = [(item["name"], item["id"]) for item in learners]
     return account_data, gr.update(choices=choices, value=learner["id"]), "Learner profile created and saved privately.", session
+
+
+
+def set_learner_student_pin(learner_id, pin, confirm_pin, session, account_data):
+    session, status = _renew_account_session(session)
+    if not session:
+        return account_data, status, session
+    if str(pin or "") != str(confirm_pin or ""):
+        return account_data, "The two PIN entries do not match.", session
+    try:
+        pin_record = make_pin_record(pin)
+    except ValueError as error:
+        return account_data, str(error), session
+    learner = next((item for item in (account_data or {}).get("learners", [])
+                    if item.get("id") == learner_id), None)
+    if not learner:
+        return account_data, "Choose a learner profile first.", session
+    learner["student_pin"] = pin_record
+    learner["pin_failed_attempts"] = 0
+    learner["pin_locked_until"] = 0
+    saved, save_status = account_store.save_user_memory(session, account_data)
+    message = "Student PIN saved. Give the six-digit PIN only to that learner." if saved else "PIN could not be saved: " + save_status
+    return account_data, message, session
+
+
+def unlock_student_workspace(learner_id, pin, session, account_data):
+    session, status = _renew_account_session(session)
+    if not session:
+        return None, status, session, gr.update(visible=False)
+    learner = next((item for item in (account_data or {}).get("learners", [])
+                    if item.get("id") == learner_id), None)
+    if not learner:
+        return None, "Choose your learner profile.", session, gr.update(visible=False)
+    if not learner.get("student_pin"):
+        return None, "A parent must set a student PIN in Parent view first.", session, gr.update(visible=False)
+    now = time.time()
+    locked_until = float(learner.get("pin_locked_until", 0) or 0)
+    if locked_until > now:
+        remaining = max(1, int((locked_until - now + 59) // 60))
+        return None, "Too many incorrect attempts. Try again in about " + str(remaining) + " minute(s).", session, gr.update(visible=False)
+    if not verify_pin(pin, learner.get("student_pin")):
+        attempts = int(learner.get("pin_failed_attempts", 0)) + 1
+        learner["pin_failed_attempts"] = attempts
+        if attempts >= 5:
+            learner["pin_failed_attempts"] = 0
+            learner["pin_locked_until"] = now + 900
+            message = "Too many incorrect attempts. This learner profile is locked for 15 minutes."
+        else:
+            message = "That PIN is not correct. Please try again."
+        account_store.save_user_memory(session, account_data)
+        return None, message, session, gr.update(visible=False)
+    learner["pin_failed_attempts"] = 0
+    learner["pin_locked_until"] = 0
+    account_store.save_user_memory(session, account_data)
+    access = {"learner_id": learner_id, "account_user_id": session.get("user_id")}
+    return access, "Welcome, " + learner.get("name", "learner") + "! Your learning space is unlocked.", session, gr.update(visible=True)
+
+
+def learner_profile_choices(account_data):
+    return gr.update(choices=[
+        (item.get("name", "Learner"), item.get("id"))
+        for item in (account_data or {}).get("learners", [])
+    ], value=None)
 
 
 def switch_xemex_view(view):
