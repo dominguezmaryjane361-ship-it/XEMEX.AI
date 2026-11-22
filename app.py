@@ -497,8 +497,7 @@ def think_independently(topic=None):
                 "topic. Do not invent research findings."
             ),
         },
-        {            "role": "user",
-            "content": (
+        {            "role": "user",            "content": (
                 f"Topic: {topic}\n\nResearch material:\n{research}\n\n"
                 "Write a concise exploration with these sections:\n"
                 "DISCOVERY:\nQUESTION:\nPERSPECTIVE:\nNEXT TOPIC:"
@@ -997,14 +996,14 @@ def unlock_parent_tools(password, session):
 def learner_profile_choices(account_data, current_learner_id):
     learners = (account_data or {}).get("learners", [])
     choices = [(item.get("name", "Learner"), item.get("id")) for item in learners]
-    valid_ids = {item.get("id") for item in learners}
-    value = current_learner_id if current_learner_id in valid_ids else None
+    valid_ids = {item.get("id") for item in learners}    value = current_learner_id if current_learner_id in valid_ids else None
     return gr.update(choices=choices, value=value)
 
 
 def switch_xemex_view(view, student_access, parent_access, session):
     is_parent = view == "parent"
-    user_id = (session or {}).get("user_id")    parent_unlocked = isinstance(parent_access, dict) and parent_access.get("account_user_id") == user_id
+    user_id = (session or {}).get("user_id")
+    parent_unlocked = isinstance(parent_access, dict) and parent_access.get("account_user_id") == user_id
     student_unlocked = isinstance(student_access, dict) and student_access.get("account_user_id") == user_id
     return (
         gr.update(visible=(is_parent and parent_unlocked)),
@@ -1497,8 +1496,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         independent_student_chatbot = gr.Chatbot(label="Your learning conversation")
         independent_student_message = gr.Textbox(label="Talk with XEMEX", placeholder="Ask a question or tell XEMEX what you are learning.")
         with gr.Row():
-            independent_student_send_button = gr.Button("Send", variant="primary")
-            independent_student_signout_button = gr.Button("Sign out")
+            independent_student_send_button = gr.Button("Send", variant="primary")            independent_student_signout_button = gr.Button("Sign out")
     with gr.Column(visible=False) as chat_panel:
         account_status = gr.Markdown("Signed in.")
         view_mode = gr.Radio(
