@@ -26,6 +26,9 @@ BEGIN
 END
 $;
 
+CREATE UNIQUE INDEX IF NOT EXISTS user_memories_user_id_unique
+    ON public.user_memories (user_id);
+
 ALTER TABLE public.user_memories ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.user_memories FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.user_memories TO authenticated;
