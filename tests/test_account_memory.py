@@ -57,7 +57,7 @@ class AccountMemoryTests(unittest.TestCase):
             [
                 {"id": "learner-1", "name": "Student One", "age_group": "early_elementary",
                  "student_pin": None, "pin_failed_attempts": 0, "pin_locked_until": 0,
-                 "parent_controls": {"allow_practice": True, "allow_hints": True, "daily_activity_limit": 20}},
+                 "parent_controls": {"allow_chat": True, "allow_practice": True, "allow_hints": True, "daily_activity_limit": 20}},
                 {"id": "learner-3", "name": "Student Three", "age_group": "teen",
                  "student_pin": None, "pin_failed_attempts": 0, "pin_locked_until": 0,
                  "parent_controls": {"allow_practice": True, "allow_hints": True, "daily_activity_limit": 20}},
