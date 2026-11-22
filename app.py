@@ -850,7 +850,7 @@ def export_account_data(session, parent_access):
 def delete_account_from_settings(password, confirmation, session, parent_access, account_data, history):
     if confirmation != "DELETE":
         return session, account_data, history, "Type DELETE exactly to confirm account deletion.", gr.update(), gr.update(), gr.update(), gr.update()
-    if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
+    if not _parent_access_valid(parent_access, session):
         return session, account_data, history, "Unlock Parent tools again before deleting this account.", gr.update(), gr.update(), gr.update(), gr.update()
     success, status = account_store.delete_user_account(session, password)
     if not success:
@@ -873,11 +873,13 @@ def _parent_access_valid(parent_access, session):
     return (
         isinstance(parent_access, dict)
         and parent_access.get("account_user_id") == (session or {}).get("user_id")
+        and isinstance(parent_access.get("expires_at"), (int, float))
+        and parent_access.get("expires_at") > time.time()
     )
 
 
 def create_independent_student_login(learner_id, username, email, password, session, parent_access):
-    if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
+    if not _parent_access_valid(parent_access, session):
         return "Unlock Parent view again before creating student sign-ins.", session
     result, status = student_accounts.create_student_account(
         session, learner_id, username, password, email
@@ -886,7 +888,7 @@ def create_independent_student_login(learner_id, username, email, password, sess
 
 
 def reset_independent_student_password(learner_id, new_password, session, parent_access):
-    if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
+    if not _parent_access_valid(parent_access, session):
         return "Unlock Parent view again before resetting a student password.", session
     success, status = student_accounts.reset_student_password(
         session, learner_id, new_password
@@ -1210,7 +1212,7 @@ def unlock_parent_tools(password, session):
     verified, message = account_store.sign_in(session.get("email", ""), password)
     if not verified or verified.get("user_id") != session.get("user_id"):
         return None, "Parent sign-in was not verified. Check the password and try again.", session, gr.update(visible=False), gr.update(visible=True)
-    access = {"account_user_id": verified["user_id"]}
+    access = {"account_user_id": verified["user_id"], "expires_at": time.time() + 900}
     return access, "Parent access verified.", verified, gr.update(visible=True), gr.update(visible=False)
 
 
