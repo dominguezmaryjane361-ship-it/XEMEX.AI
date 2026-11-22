@@ -644,6 +644,13 @@ def _restore_account_chat(account_data):
     return restored
 
 
+def _renew_account_session(session):
+    renewed, status = account_store.ensure_valid_session(session)
+    if not renewed:
+        return None, status
+    return renewed, status
+
+
 def _authenticate_account(email, password, create_account=False):
     if create_account:
         session, status = account_store.sign_up(email, password)
@@ -673,18 +680,19 @@ def sign_out_account(session):
 
 
 def create_learner_profile(name, age_group, session, account_data):
-    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
-        return account_data, gr.update(), "Please sign in before creating a learner profile."
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return account_data, gr.update(), session_status, None
     name = str(name or "").strip()[:80]
     if not name:
-        return account_data, gr.update(), "Enter a learner name or nickname."
+        return account_data, gr.update(), "Enter a learner name or nickname.", session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
     learners = account_data.setdefault("learners", [])
     if len(learners) >= 20:
-        return account_data, gr.update(), "This account has reached the 20-profile limit."
+        return account_data, gr.update(), "This account has reached the 20-profile limit.", session
     if any(item.get("name", "").casefold() == name.casefold() for item in learners):
-        return account_data, gr.update(), "A learner with that name already exists."
+        return account_data, gr.update(), "A learner with that name already exists.", session
     learner = {
         "id": str(uuid.uuid4()),
         "name": name,
@@ -694,9 +702,9 @@ def create_learner_profile(name, age_group, session, account_data):
     saved, status = account_store.save_user_memory(session, account_data)
     if not saved:
         learners.pop()
-        return account_data, gr.update(), "Profile could not be saved: " + status
+        return account_data, gr.update(), "Profile could not be saved: " + status, session
     choices = [(item["name"], item["id"]) for item in learners]
-    return account_data, gr.update(choices=choices, value=learner["id"]), "Learner profile created and saved privately."
+    return account_data, gr.update(choices=choices, value=learner["id"]), "Learner profile created and saved privately.", session
 
 
 def select_learner_profile(learner_id, account_data):
@@ -709,10 +717,11 @@ def select_learner_profile(learner_id, account_data):
 def start_tutoring_lesson(topic, history, session, account_data, age_group, subject, learner_id=None):
     history = history or []
     topic = (topic or "").strip()
-    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
-        return history, account_data, "Please sign in before starting a lesson.", topic
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return history, account_data, session_status, topic, None
     if not topic:
-        return history, account_data, "Enter a topic for the lesson first.", topic
+        return history, account_data, "Enter a topic for the lesson first.", topic, session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
 
@@ -728,7 +737,7 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     )
     reply = ask_llm(prompt)
     if reply.startswith(("Groq returned HTTP", "I couldn't reach", "XEMEX is not connected")):
-        return history, account_data, reply, topic
+        return history, account_data, reply, topic, session
 
     history = history + [{"role": "assistant", "content": reply}]
     account_data.setdefault("chat_history", []).append({
@@ -749,19 +758,20 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
     saved, status = account_store.save_user_memory(session, account_data)
     if not saved:
         status = "Warning: " + status
-    return history, account_data, status, ""
+    return history, account_data, status, "", session
 
 
 def record_account_learning_progress(topic, skill, performance, notes, session, account_data, age_group, subject, learner_id=None):
-    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
-        return account_data, "Please sign in before saving learning progress."
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return account_data, session_status, None
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
 
     topic = str(topic or "").strip()[:200]
     skill = str(skill or "").strip()[:150]
     if not topic or not skill:
-        return account_data, "Enter both a topic and a skill before saving."
+        return account_data, "Enter both a topic and a skill before saving.", session
     allowed_performance = {"mastered", "developing", "needs practice", "not yet assessed"}
     performance = str(performance or "not yet assessed").strip().lower()
     if performance not in allowed_performance:
@@ -782,18 +792,19 @@ def record_account_learning_progress(topic, skill, performance, notes, session, 
     account_data["learning_progress"] = account_data["learning_progress"][-100:]
     saved, status = account_store.save_user_memory(session, account_data)
     if not saved:
-        return account_data, "Progress was added in this session but could not be saved: " + status
-    return account_data, "Learning check saved privately to this account."
+        return account_data, "Progress was added in this session but could not be saved: " + status, session
+    return account_data, "Learning check saved privately to this account.", session
 
 
 def summarize_account_learning_progress(session, account_data, learner_id=None):
-    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
-        return "Please sign in before viewing learning progress."
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return session_status, None
     records = (account_data or {}).get("learning_progress", [])
     if learner_id:
         records = [item for item in records if item.get("learner_id") == learner_id]
     if not records:
-        return "No learning checks have been recorded for this account yet."
+        return "No learning checks have been recorded for this account yet.", session
     # Summarize only this authenticated account's records; never use the
     # legacy shared learning-data file or another learner's history.
     prompt = (
@@ -810,17 +821,18 @@ def summarize_account_learning_progress(session, account_data, learner_id=None):
     }, {
         "role": "user",
         "content": prompt
-    }])
+    }]), session
 
 
 def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic"):
     message = (message or "").strip()
     history = history or []
     if not message:
-        return history, "", account_data, ""
+        return history, "", account_data, "", session
 
-    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
-        return history, "", account_data, "Please sign in before chatting."
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return history, "", account_data, session_status, None
 
     # All personal context below is scoped to the authenticated account.
     if not isinstance(account_data, dict):
@@ -938,7 +950,7 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
     saved, save_status = account_store.save_user_memory(session, account_data)
     if not saved:
         save_status = "Warning: " + save_status
-    return updated_history, "", account_data, save_status
+    return updated_history, "", account_data, save_status, session
 
 
 # =========================================================
@@ -1057,13 +1069,13 @@ with gr.Blocks(title="XEMEX.AI") as app:
     )
 
     chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal]
-    chat_outputs = [chatbot, message, account_memory_state, account_status]
+    chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
     message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     lesson_button.click(
         start_tutoring_lesson,
         inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject, learner_profile],
-        outputs=[chatbot, account_memory_state, account_status, lesson_topic],
+        outputs=[chatbot, account_memory_state, account_status, lesson_topic, session_state],
     )
     save_progress_button.click(
         record_account_learning_progress,
@@ -1071,17 +1083,17 @@ with gr.Blocks(title="XEMEX.AI") as app:
             progress_topic, progress_skill, progress_performance, progress_notes,
             session_state, account_memory_state, learner_age_group, learner_subject, learner_profile,
         ],
-        outputs=[account_memory_state, progress_status],
+        outputs=[account_memory_state, progress_status, session_state],
     )
     summarize_progress_button.click(
         summarize_account_learning_progress,
         inputs=[session_state, account_memory_state, learner_profile],
-        outputs=[progress_status],
+        outputs=[progress_status, session_state],
     )
     create_learner_button.click(
         create_learner_profile,
         inputs=[learner_name_input, learner_age_group, session_state, account_memory_state],
-        outputs=[account_memory_state, learner_profile, learner_profile_status],
+        outputs=[account_memory_state, learner_profile, learner_profile_status, session_state],
     )
     learner_profile.change(
         select_learner_profile,
