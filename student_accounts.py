@@ -131,7 +131,7 @@ def validate_student_session(session):
         if payload.get("lid") != session.get("learner_id"):
             return None
         return payload
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (ValueError, TypeError, KeyError, RuntimeError, json.JSONDecodeError):
         return None
 
 
