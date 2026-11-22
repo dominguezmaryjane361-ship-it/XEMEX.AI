@@ -17,6 +17,7 @@ import requests
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "").strip()
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 USER_DATA_DIR = Path(os.environ.get("XEMEX_USER_DATA_DIR", "user_data"))
 REQUEST_TIMEOUT = 20
 _uuid_pattern = re.compile(
@@ -132,6 +133,42 @@ def sign_in(email, password):
         }, "Signed in successfully."
     except (requests.RequestException, RuntimeError) as error:
         return None, "Sign-in failed: {}".format(error)
+
+
+def delete_user_account(session, current_password):
+    """Delete the authenticated account and its cascading cloud records.
+
+    Requires a fresh password check and a server-only Supabase service-role key.
+    """
+    session, status = ensure_valid_session(session)
+    if not session:
+        return False, status
+    user_id = str(session.get("user_id") or "")
+    email = str(session.get("email") or "").strip().lower()
+    if not _uuid_pattern.fullmatch(user_id) or not email:
+        return False, "The signed-in account could not be verified."
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        return False, "Account deletion is not configured. Set the server-only SUPABASE_SERVICE_ROLE_KEY."
+    verified, verify_status = sign_in(email, current_password)
+    if not verified or verified.get("user_id") != user_id:
+        return False, "Password verification failed. Your account has not been deleted."
+    try:
+        response = requests.delete(
+            SUPABASE_URL + "/auth/v1/admin/users/" + user_id,
+            headers={
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        _response_json(response)
+        try:
+            _user_file(user_id).unlink(missing_ok=True)
+        except OSError as error:
+            print("Local account-data cleanup warning:", str(error)[:180])
+        return True, "Your XEMEX account deletion was submitted. Related cloud records are configured to be deleted with the account."
+    except (requests.RequestException, RuntimeError) as error:
+        return False, "Account deletion failed. No success was reported: " + str(error)[:180]
 
 
 def refresh_session(session):
