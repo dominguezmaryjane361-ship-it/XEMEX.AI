@@ -679,6 +679,21 @@ def sign_in_account(email, password):
     return _authenticate_account(email, password, False)
 
 
+def restore_self_learner(session, account_data):
+    if not isinstance(session, dict) or not isinstance(account_data, dict):
+        return None, gr.update(visible=True), gr.update(visible=False), gr.update(choices=[], value=None), "elementary"
+    setup = account_data.get("registration_setup") or {}
+    if setup.get("setup_for") != "self":
+        return None, gr.update(visible=True), gr.update(visible=False), gr.update(choices=[(x.get("name"), x.get("id")) for x in account_data.get("learners", [])], value=None), "elementary"
+    learner_id = setup.get("self_learner_id")
+    learner = next((x for x in account_data.get("learners", []) if x.get("id") == learner_id and x.get("is_self") is True), None)
+    if not learner:
+        return None, gr.update(visible=True), gr.update(visible=False), gr.update(choices=[], value=None), "elementary"
+    access = {"learner_id": learner_id, "account_user_id": session.get("user_id")}
+    choices = [(x.get("name"), x.get("id")) for x in account_data.get("learners", [])]
+    return access, gr.update(visible=False), gr.update(visible=True), gr.update(choices=choices, value=learner_id), learner.get("age_group", "elementary")
+
+
 def _age_group_for_years(age):
     if age < 6:
         return "preschool"
@@ -722,6 +737,21 @@ def create_account(email, password, setup_for, learner_age):
         "adult_learner_consent": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if setup_for == "self":
+        self_learner = {
+            "id": str(uuid.uuid4()),
+            "name": "My learning profile",
+            "age": age,
+            "age_group": _age_group_for_years(age),
+            "is_self": True,
+            "parent_controls": {
+                "allow_practice": True,
+                "allow_hints": True,
+                "daily_activity_limit": 0,
+            },
+        }
+        account_data.setdefault("learners", []).append(self_learner)
+        account_data["registration_setup"]["self_learner_id"] = self_learner["id"]
     saved, save_status = account_store.save_user_memory(session, account_data)
     if not saved:
         warning = "Account created, but setup preferences could not be saved. " + save_status
@@ -731,6 +761,10 @@ def create_account(email, password, setup_for, learner_age):
         return tuple(result)
     result = list(result)
     result[1] = account_data
+    result[10] = gr.update(
+        choices=[(item["name"], item["id"]) for item in account_data.get("learners", [])],
+        value=account_data.get("registration_setup", {}).get("self_learner_id"),
+    )
     result[3] = "Account created. " + save_status
     result[4] = result[3]
     return tuple(result)
@@ -1682,6 +1716,10 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         sign_in_account,
         inputs=[email_input, password_input],
         outputs=auth_outputs,
+    ).then(
+        restore_self_learner,
+        inputs=[session_state, account_memory_state],
+        outputs=[student_access_state, student_lock_column, student_workspace_column, student_profile, learner_age_group],
     )
     independent_student_login_button.click(
         sign_in_independent_student,
@@ -1696,6 +1734,10 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         create_account,
         inputs=[email_input, password_input, registration_setup_for, registration_age],
         outputs=auth_outputs,
+    ).then(
+        restore_self_learner,
+        inputs=[session_state, account_memory_state],
+        outputs=[student_access_state, student_lock_column, student_workspace_column, student_profile, learner_age_group],
     )
 
     view_mode.change(
