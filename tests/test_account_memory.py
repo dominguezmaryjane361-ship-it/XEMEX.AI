@@ -61,6 +61,54 @@ class AccountMemoryTests(unittest.TestCase):
         )
         self.assertEqual(len(data["learning_progress"]), 2)
 
+    @patch.object(account_memory, "refresh_session")
+    @patch.object(account_memory.time, "time", return_value=2000)
+    def test_valid_session_is_reused_before_expiry(self, mock_time, mock_refresh):
+        session = {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "access_token": "active-token",
+            "refresh_token": "refresh-token",
+            "expires_at": 2100,
+        }
+        renewed, status = account_memory.ensure_valid_session(session)
+        self.assertIs(renewed, session)
+        self.assertEqual(status, "Session active.")
+        mock_refresh.assert_not_called()
+
+    @patch.object(account_memory, "refresh_session")
+    @patch.object(account_memory.time, "time", return_value=2000)
+    def test_expired_session_is_refreshed(self, mock_time, mock_refresh):
+        session = {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "access_token": "old-token",
+            "refresh_token": "refresh-token",
+            "expires_at": 1900,
+        }
+        refreshed = {
+            "user_id": session["user_id"],
+            "access_token": "new-token",
+            "refresh_token": "rotated-refresh-token",
+            "expires_at": 5500,
+        }
+        mock_refresh.return_value = refreshed
+        renewed, status = account_memory.ensure_valid_session(session)
+        self.assertEqual(renewed["access_token"], "new-token")
+        self.assertEqual(status, "Your session was securely renewed.")
+        mock_refresh.assert_called_once_with(session)
+
+    @patch.object(account_memory, "refresh_session", return_value=None)
+    @patch.object(account_memory.time, "time", return_value=2000)
+    def test_expired_session_requires_sign_in_if_refresh_fails(self, mock_time, mock_refresh):
+        session = {
+            "user_id": "11111111-1111-4111-8111-111111111111",
+            "access_token": "expired-token",
+            "refresh_token": "invalid-refresh-token",
+            "expires_at": 1900,
+        }
+        renewed, status = account_memory.ensure_valid_session(session)
+        self.assertIsNone(renewed)
+        self.assertEqual(status, "Your session expired. Please sign in again.")
+
     def test_user_file_requires_uuid(self):
         with self.assertRaises(ValueError):
             account_memory._user_file("../../other-user")
