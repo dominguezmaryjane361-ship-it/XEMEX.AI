@@ -1434,6 +1434,8 @@ with gr.Blocks(title="XEMEX.AI") as app:
     account_memory_state = gr.State(value=account_store.default_user_memory())
     student_access_state = gr.State(value=None)
     parent_access_state = gr.State(value=None)
+    independent_student_state = gr.State(value=None)
+    independent_student_memory_state = gr.State(value={})
 
     with gr.Column(visible=True) as login_panel:
         gr.Markdown("## Sign in or create an account")
@@ -1443,7 +1445,27 @@ with gr.Blocks(title="XEMEX.AI") as app:
             sign_in_button = gr.Button("Sign in", variant="primary")
             create_account_button = gr.Button("Create account")
         auth_status = gr.Markdown("Each account has its own private saved memory.")
+        gr.Markdown("---")
+        gr.Markdown("## Student sign-in")
+        gr.Markdown("Students can sign in with the username or email address their parent created.")
+        independent_student_identifier = gr.Textbox(label="Student username or email")
+        independent_student_password = gr.Textbox(label="Student password", type="password")
+        independent_student_login_button = gr.Button("Sign in as student", variant="primary")
+        independent_student_status = gr.Markdown("Student learning history is stored separately from the parent account.")
 
+    with gr.Column(visible=False) as independent_student_panel:
+        gr.Markdown("# XEMEX Student Learning")
+        gr.Markdown("Welcome! Your learning history belongs to your student account.")
+        independent_student_topic = gr.Textbox(label="What would you like to learn?", placeholder="For example: multiplication, planets, or reading")
+        with gr.Row():
+            independent_student_practice_button = gr.Button("Start practice", variant="primary")
+            independent_student_hint_button = gr.Button("Get a hint")
+        independent_student_activity_status = gr.Markdown("Choose a topic to begin.")
+        independent_student_chatbot = gr.Chatbot(label="Your learning conversation", type="messages")
+        independent_student_message = gr.Textbox(label="Talk with XEMEX", placeholder="Ask a question or tell XEMEX what you are learning.")
+        with gr.Row():
+            independent_student_send_button = gr.Button("Send", variant="primary")
+            independent_student_signout_button = gr.Button("Sign out")
     with gr.Column(visible=False) as chat_panel:
         account_status = gr.Markdown("Signed in.")
         view_mode = gr.Radio(
@@ -1512,6 +1534,14 @@ with gr.Blocks(title="XEMEX.AI") as app:
                 parent_pin_confirm = gr.Textbox(label="Confirm student PIN", type="password", max_lines=1)
                 save_student_pin_button = gr.Button("Save student PIN")
                 student_pin_status = gr.Markdown("Set a PIN for the selected learner. Only a salted hash is stored.")
+                gr.Markdown("### Independent student sign-in")
+                student_username_input = gr.Textbox(label="Student username (3–24 characters)")
+                student_email_input = gr.Textbox(label="Student email (optional)")
+                student_password_input = gr.Textbox(label="Create student password (10+ characters)", type="password")
+                create_student_login_button = gr.Button("Create student username and password")
+                student_login_management_status = gr.Markdown("Create a separate student login for the selected learner.")
+                student_password_reset_input = gr.Textbox(label="New student password", type="password")
+                reset_student_password_button = gr.Button("Reset selected learner's password")
         with gr.Column(visible=True) as student_lock_column:
             gr.Markdown("## Student sign-in")
             gr.Markdown("Choose your profile and enter the six-digit PIN your parent gave you.")
@@ -1544,6 +1574,15 @@ with gr.Blocks(title="XEMEX.AI") as app:
         inputs=[email_input, password_input],
         outputs=auth_outputs,
     )
+    independent_student_login_button.click(
+        sign_in_independent_student,
+        inputs=[independent_student_identifier, independent_student_password],
+        outputs=[
+            independent_student_state, independent_student_memory_state,
+            independent_student_chatbot, independent_student_status,
+            login_panel, independent_student_panel,
+        ],
+    )
     create_account_button.click(
         create_account,
         inputs=[email_input, password_input],
@@ -1574,6 +1613,16 @@ with gr.Blocks(title="XEMEX.AI") as app:
         set_learner_student_pin,
         inputs=[learner_profile, parent_pin_input, parent_pin_confirm, session_state, account_memory_state],
         outputs=[account_memory_state, student_pin_status, session_state],
+    )
+    create_student_login_button.click(
+        create_independent_student_login,
+        inputs=[learner_profile, student_username_input, student_email_input, student_password_input, session_state],
+        outputs=[student_login_management_status, session_state],
+    )
+    reset_student_password_button.click(
+        reset_independent_student_password,
+        inputs=[learner_profile, student_password_reset_input, session_state],
+        outputs=[student_login_management_status, session_state],
     )
     chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal, student_access_state, student_profile]
     chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
@@ -1646,6 +1695,35 @@ with gr.Blocks(title="XEMEX.AI") as app:
     )
 
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
+    independent_student_message.submit(
+        independent_student_chat,
+        inputs=[independent_student_message, independent_student_chatbot, independent_student_state, independent_student_memory_state],
+        outputs=[independent_student_chatbot, independent_student_message, independent_student_memory_state, independent_student_status],
+    )
+    independent_student_send_button.click(
+        independent_student_chat,
+        inputs=[independent_student_message, independent_student_chatbot, independent_student_state, independent_student_memory_state],
+        outputs=[independent_student_chatbot, independent_student_message, independent_student_memory_state, independent_student_status],
+    )
+    independent_student_practice_button.click(
+        lambda topic, history, session, memory: independent_student_activity("practice", topic, history, session, memory),
+        inputs=[independent_student_topic, independent_student_chatbot, independent_student_state, independent_student_memory_state],
+        outputs=[independent_student_chatbot, independent_student_memory_state, independent_student_activity_status],
+    )
+    independent_student_hint_button.click(
+        lambda topic, history, session, memory: independent_student_activity("hint", topic, history, session, memory),
+        inputs=[independent_student_topic, independent_student_chatbot, independent_student_state, independent_student_memory_state],
+        outputs=[independent_student_chatbot, independent_student_memory_state, independent_student_activity_status],
+    )
+    independent_student_signout_button.click(
+        sign_out_independent_student,
+        inputs=[independent_student_state],
+        outputs=[
+            independent_student_state, independent_student_memory_state,
+            independent_student_chatbot, independent_student_status,
+            login_panel, independent_student_panel,
+        ],
+    )
 
     sign_out_button.click(
         sign_out_account_and_lock_student,
