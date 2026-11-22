@@ -335,6 +335,7 @@ def normalize_age_group(age_group: str) -> str:
         "preschool": "preschool",
         "6-8": "early_elementary",
         "early elementary": "early_elementary",
+        "early_elementary": "early_elementary",
         "9-12": "elementary",
         "elementary": "elementary",
         "13-17": "teen",
