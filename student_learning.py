@@ -8,7 +8,7 @@ from teaching_methods import normalize_age_group, safe_text
 
 def build_student_activity_prompt(age_group, subject, topic, activity="practice"):
     group = normalize_age_group(age_group)
-    ages = {"preschool": "3-5", "early_elementary": "6-8", "elementary": "9-12", "teen": "13-17"}[group]
+    ages = {"preschool": "0-5", "early_elementary": "6-8", "elementary": "9-12", "teen": "13-17", "adult": "18+"}.get(group, "9-12")
     activity = str(activity or "practice").strip().lower()
     if activity not in {"practice", "hint"}:
         activity = "practice"
