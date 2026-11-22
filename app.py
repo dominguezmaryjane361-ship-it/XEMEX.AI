@@ -706,7 +706,7 @@ def _age_group_for_years(age):
     return "adult"
 
 
-def create_account(email, password, setup_for, learner_age):
+def create_account(email, password, setup_for, learner_age, learner_name):
     setup_for = str(setup_for or "").strip().lower()
     try:
         age = int(learner_age)
@@ -730,6 +730,10 @@ def create_account(email, password, setup_for, learner_age):
     if not session:
         return result
     account_data, memory_status = account_store.load_user_memory(session)
+    learner_name = str(learner_name or "").strip()[:80]
+    if setup_for == "child" and not learner_name:
+        message = "Enter the child's name or nickname."
+        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
     account_data["registration_setup"] = {
         "setup_for": setup_for,
         "learner_age": age,
@@ -737,6 +741,21 @@ def create_account(email, password, setup_for, learner_age):
         "adult_learner_consent": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if setup_for == "child":
+        child_learner = {
+            "id": str(uuid.uuid4()),
+            "name": learner_name,
+            "age": age,
+            "age_group": _age_group_for_years(age),
+            "is_self": False,
+            "parent_controls": {
+                "allow_practice": True,
+                "allow_hints": True,
+                "daily_activity_limit": 20,
+            },
+        }
+        account_data.setdefault("learners", []).append(child_learner)
+        account_data["registration_setup"]["child_learner_id"] = child_learner["id"]
     if setup_for == "self":
         self_learner = {
             "id": str(uuid.uuid4()),
@@ -1568,6 +1587,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                 label="Who are you setting up XEMEX for?",
             )
             registration_age = gr.Number(label="How old is the learner? (years)", precision=0, minimum=0, maximum=120)
+            registration_learner_name = gr.Textbox(label="Child's name or nickname (leave blank for yourself)")
             gr.Markdown("For adult learners (18+), the adult must create their own account for now. Parent-assisted setup will require a separate adult approval step.")
             gr.Markdown("For children under 13, verified parental consent and child-privacy safeguards must be completed before public launch.")
             create_account_button = gr.Button("Create account", variant="primary")
@@ -1732,7 +1752,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     create_account_button.click(
         create_account,
-        inputs=[email_input, password_input, registration_setup_for, registration_age],
+        inputs=[email_input, password_input, registration_setup_for, registration_age, registration_learner_name],
         outputs=auth_outputs,
     ).then(
         restore_self_learner,
