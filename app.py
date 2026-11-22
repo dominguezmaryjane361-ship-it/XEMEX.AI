@@ -783,6 +783,11 @@ def create_learner_profile(name, age_group, session, account_data):
     return account_data, gr.update(choices=choices, value=learner["id"]), "Learner profile created and saved privately.", session
 
 
+def switch_xemex_view(view):
+    is_parent = view == "parent"
+    return gr.update(visible=is_parent), gr.update(visible=not is_parent)
+
+
 def select_learner_profile(learner_id, account_data):
     for learner in (account_data or {}).get("learners", []):
         if learner.get("id") == learner_id:
@@ -1213,7 +1218,13 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     with gr.Column(visible=False) as chat_panel:
         account_status = gr.Markdown("Signed in.")
-        with gr.Accordion("Tutor settings", open=False):
+        view_mode = gr.Radio(
+            choices=[("Student view", "student"), ("Parent view", "parent")],
+            value="student",
+            label="Choose your XEMEX view",
+        )
+        with gr.Column(visible=False) as parent_tools_column:
+            with gr.Accordion("Parent tools", open=False):
             tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
             learner_age_group = gr.Dropdown(
                 choices=[
@@ -1262,14 +1273,15 @@ with gr.Blocks(title="XEMEX.AI") as app:
             )
             save_parent_controls_button = gr.Button("Save parent safety settings")
             parent_controls_status = gr.Markdown("Settings apply to the selected learner's practice and hint activities.")
-        with gr.Accordion("Student learning workspace", open=True):
-            gr.Markdown("A focused space for age-appropriate practice, helpful hints, and learning one step at a time.")
+        with gr.Column(visible=True) as student_workspace_column:
+            gr.Markdown("## Your learning space")
+            gr.Markdown("Welcome! Choose something you want to learn. You can practice, ask for a hint, or talk with XEMEX.")
             student_topic = gr.Textbox(label="What would you like to learn?", placeholder="For example: multiplication, planets, or reading")
             with gr.Row():
                 student_practice_button = gr.Button("Start practice", variant="primary")
                 student_hint_button = gr.Button("Get a hint")
-            student_activity_status = gr.Markdown("Choose a learner profile above to begin.")
-        chatbot = gr.Chatbot(label="Conversation", type="messages")
+            student_activity_status = gr.Markdown("Choose your learner profile in Parent view before starting.")
+            chatbot = gr.Chatbot(label="Your learning conversation", type="messages")
         message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
         with gr.Row():
             send_button = gr.Button("Send", variant="primary")
@@ -1292,6 +1304,11 @@ with gr.Blocks(title="XEMEX.AI") as app:
         outputs=auth_outputs,
     )
 
+    view_mode.change(
+        switch_xemex_view,
+        inputs=[view_mode],
+        outputs=[parent_tools_column, student_workspace_column],
+    )
     chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal]
     chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
     message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
