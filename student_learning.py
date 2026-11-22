@@ -4,6 +4,7 @@ Prompt builders are pure functions so their safety and age adaptation can be
 tested without a model or network connection.
 """
 from teaching_methods import normalize_age_group, safe_text
+from child_safety import build_student_safety_prompt
 
 
 def build_student_activity_prompt(age_group, subject, topic, activity="practice"):
@@ -12,20 +13,14 @@ def build_student_activity_prompt(age_group, subject, topic, activity="practice"
     activity = str(activity or "practice").strip().lower()
     if activity not in {"practice", "hint"}:
         activity = "practice"
-    common = f"""
-You are XEMEX.AI in student learning mode.
+    common = build_student_safety_prompt(group, "tutor") + f"""
+
+STUDENT LEARNING TASK:
 Learner age range: {ages}. Subject: {safe_text(subject, 100)}.
 Topic: {safe_text(topic, 200)}.
-
-STUDENT SAFETY AND TEACHING:
-- Use age-appropriate, respectful language and one short step at a time.
-- Ask only one question at a time and wait for the learner's answer.
-- Encourage the learner to think; do not complete school assignments for them.
-- Never request passwords, home addresses, phone numbers, private photos, or secrets.
-- Never encourage a child to hide conversations from a parent or guardian.
-- If the learner describes immediate danger, encourage them to tell a trusted adult
-  and contact emergency services when appropriate.
-- Be supportive. Never shame mistakes or make diagnoses.
+Use age-appropriate, respectful language and one short step at a time.
+Ask only one question at a time and wait for the learner's answer.
+Encourage the learner to think; do not complete school assignments for them.
 """
     if activity == "hint":
         return common + """
