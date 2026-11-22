@@ -796,6 +796,72 @@ def record_account_learning_progress(topic, skill, performance, notes, session, 
     return account_data, "Learning check saved privately to this account.", session
 
 
+def build_parent_dashboard(session, account_data, learner_id=None):
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return session_status, None
+    account_data = account_data if isinstance(account_data, dict) else {}
+    learners = account_data.get("learners", [])
+    learner = next((item for item in learners if item.get("id") == learner_id), None)
+    if not learner:
+        return "Choose a learner profile to view the parent dashboard.", session
+
+    records = [
+        item for item in account_data.get("learning_progress", [])
+        if item.get("learner_id") == learner_id
+    ]
+    lessons = [item for item in records if item.get("status") == "introduced"]
+    checks = [item for item in records if item.get("status") == "parent_or_tutor_observation"]
+    counts = {"mastered": 0, "developing": 0, "needs practice": 0, "not yet assessed": 0}
+    for item in checks:
+        rating = str(item.get("performance") or "not yet assessed").lower()
+        if rating in counts:
+            counts[rating] += 1
+
+    def safe(value):
+        value = str(value or "—")
+        return value.replace("|", "\\|").replace("\n", " ").replace("\r", " ")[:160]
+
+    age = safe(learner.get("age_group", "elementary")).replace("_", " ").title()
+    lines = [
+        "## Parent dashboard: " + safe(learner.get("name")),
+        "**Age group:** " + age,
+        "",
+        "### At a glance",
+        "- Lessons introduced: **" + str(len(lessons)) + "**",
+        "- Learning checks recorded: **" + str(len(checks)) + "**",
+        "- Marked mastered: **" + str(counts["mastered"]) + "**",
+        "- Developing: **" + str(counts["developing"]) + "**",
+        "- Needs practice: **" + str(counts["needs practice"]) + "**",
+        "",
+        "### Recent learning activity",
+    ]
+    recent = sorted(records, key=lambda item: str(item.get("timestamp") or ""), reverse=True)[:10]
+    if not recent:
+        lines.append("No lessons or learning checks have been recorded for this learner yet.")
+    else:
+        lines.extend([
+            "| Date | Type | Subject | Topic | Skill / result |",
+            "|---|---|---|---|---|",
+        ])
+        for item in recent:
+            is_check = item.get("status") == "parent_or_tutor_observation"
+            kind = "Learning check" if is_check else "Lesson introduced"
+            result = safe(item.get("performance")) if is_check else "Introduced"
+            skill = safe(item.get("skill")) if is_check else result
+            date = safe(str(item.get("timestamp") or "")[:10])
+            lines.append(
+                "| " + date + " | " + kind + " | " + safe(item.get("subject"))
+                + " | " + safe(item.get("topic")) + " | " + skill + " |"
+            )
+    lines.extend([
+        "",
+        "_This dashboard reports lessons and observations entered by a parent or tutor. "
+        "It does not independently test a learner or diagnose a learning condition._",
+    ])
+    return "\n".join(lines), session
+
+
 def summarize_account_learning_progress(session, account_data, learner_id=None):
     session, session_status = _renew_account_session(session)
     if not session:
@@ -1045,6 +1111,9 @@ with gr.Blocks(title="XEMEX.AI") as app:
                 save_progress_button = gr.Button("Save learning check")
                 summarize_progress_button = gr.Button("Summarize progress")
             progress_status = gr.Markdown("Progress is saved privately to the signed-in account.")
+            gr.Markdown("### Parent dashboard")
+            refresh_dashboard_button = gr.Button("Refresh parent dashboard")
+            parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
         chatbot = gr.Chatbot(label="Conversation", type="messages")
         message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
         with gr.Row():
@@ -1089,6 +1158,11 @@ with gr.Blocks(title="XEMEX.AI") as app:
         summarize_account_learning_progress,
         inputs=[session_state, account_memory_state, learner_profile],
         outputs=[progress_status, session_state],
+    )
+    refresh_dashboard_button.click(
+        build_parent_dashboard,
+        inputs=[session_state, account_memory_state, learner_profile],
+        outputs=[parent_dashboard, session_state],
     )
     create_learner_button.click(
         create_learner_profile,
