@@ -497,8 +497,7 @@ def think_independently(topic=None):
                 "topic. Do not invent research findings."
             ),
         },
-        {
-            "role": "user",
+        {            "role": "user",
             "content": (
                 f"Topic: {topic}\n\nResearch material:\n{research}\n\n"
                 "Write a concise exploration with these sections:\n"
@@ -667,6 +666,14 @@ def _authenticate_account(email, password, create_account=False):
     restored = _restore_account_chat(account_data)
     learner_choices = [(item["name"], item["id"]) for item in account_data.get("learners", [])]
     return session, account_data, restored, status + " " + memory_status, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True), account_data.get("tutor_settings", {}).get("age_group", "elementary"), account_data.get("tutor_settings", {}).get("subject", "General learning"), account_data.get("tutor_settings", {}).get("learning_goal", "Understand the topic"), gr.update(choices=learner_choices, value=(learner_choices[0][1] if learner_choices else None))
+
+
+def update_login_role(role):
+    return gr.update(visible=(role == "parent")), gr.update(visible=(role == "student"))
+
+
+def reset_login_role():
+    return None, gr.update(visible=False), gr.update(visible=False)
 
 
 def sign_in_account(email, password):
@@ -997,8 +1004,7 @@ def learner_profile_choices(account_data, current_learner_id):
 
 def switch_xemex_view(view, student_access, parent_access, session):
     is_parent = view == "parent"
-    user_id = (session or {}).get("user_id")
-    parent_unlocked = isinstance(parent_access, dict) and parent_access.get("account_user_id") == user_id
+    user_id = (session or {}).get("user_id")    parent_unlocked = isinstance(parent_access, dict) and parent_access.get("account_user_id") == user_id
     student_unlocked = isinstance(student_access, dict) and student_access.get("account_user_id") == user_id
     return (
         gr.update(visible=(is_parent and parent_unlocked)),
@@ -1441,7 +1447,7 @@ def start_heartbeat_once():
 # 13. GRADIO INTERFACE
 # =========================================================
 
-with gr.Blocks(title="XEMEX.AI") as app:
+with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="blue", neutral_hue="slate")) as app:
     gr.Markdown("# XEMEX.AI")
     gr.Markdown("Your personal AI assistant and learning companion.")
 
@@ -1453,20 +1459,32 @@ with gr.Blocks(title="XEMEX.AI") as app:
     independent_student_memory_state = gr.State(value={})
 
     with gr.Column(visible=True) as login_panel:
-        gr.Markdown("## Sign in or create an account")
-        email_input = gr.Textbox(label="Email", placeholder="you@example.com")
-        password_input = gr.Textbox(label="Password", type="password")
-        with gr.Row():
-            sign_in_button = gr.Button("Sign in", variant="primary")
-            create_account_button = gr.Button("Create account")
-        auth_status = gr.Markdown("Each account has its own private saved memory.")
-        gr.Markdown("---")
-        gr.Markdown("## Student sign-in")
-        gr.Markdown("Students can sign in with the username or email address their parent created.")
-        independent_student_identifier = gr.Textbox(label="Student username or email")
-        independent_student_password = gr.Textbox(label="Student password", type="password")
-        independent_student_login_button = gr.Button("Sign in as student", variant="primary")
-        independent_student_status = gr.Markdown("Student learning history is stored separately from the parent account.")
+        gr.Markdown("## Welcome to XEMEX.AI")
+        gr.Markdown("### Who is signing in?")
+        login_role = gr.Radio(
+            choices=[("Parent", "parent"), ("Student", "student")],
+            value=None,
+            label="Choose your account type",
+        )
+
+        with gr.Column(visible=False) as parent_login_fields:
+            gr.Markdown("### Parent sign-in")
+            email_input = gr.Textbox(label="Parent email", placeholder="you@example.com")
+            password_input = gr.Textbox(label="Password", type="password")
+            with gr.Row():
+                sign_in_button = gr.Button("Sign in", variant="primary")
+                create_account_button = gr.Button("Create parent account")
+            auth_status = gr.Markdown("Your parent account has its own private saved memory.")
+            parent_back_button = gr.Button("Back")
+
+        with gr.Column(visible=False) as student_login_fields:
+            gr.Markdown("### Student sign-in")
+            gr.Markdown("Use the username or email address your parent created for you.")
+            independent_student_identifier = gr.Textbox(label="Student username or email")
+            independent_student_password = gr.Textbox(label="Student password", type="password")
+            independent_student_login_button = gr.Button("Sign in", variant="primary")
+            independent_student_status = gr.Markdown("Your learning history is private to your student account.")
+            student_back_button = gr.Button("Back")
 
     with gr.Column(visible=False) as independent_student_panel:
         gr.Markdown("# XEMEX Student Learning")
@@ -1497,8 +1515,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
         with gr.Column(visible=False) as parent_tools_column:
             with gr.Accordion("Parent tools", open=False):
                 tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
-                learner_age_group = gr.Dropdown(
-                    choices=[
+                learner_age_group = gr.Dropdown(                    choices=[
                         ("Preschool (3–5)", "preschool"),
                         ("Early elementary (6–8)", "early_elementary"),
                         ("Elementary (9–12)", "elementary"),
@@ -1584,6 +1601,19 @@ with gr.Blocks(title="XEMEX.AI") as app:
         auth_status, account_status, login_panel, chat_panel,
         learner_age_group, learner_subject, learner_goal, learner_profile
     ]
+    login_role.change(
+        update_login_role,
+        inputs=[login_role],
+        outputs=[parent_login_fields, student_login_fields],
+    )
+    parent_back_button.click(
+        reset_login_role,
+        outputs=[login_role, parent_login_fields, student_login_fields],
+    )
+    student_back_button.click(
+        reset_login_role,
+        outputs=[login_role, parent_login_fields, student_login_fields],
+    )
     sign_in_button.click(
         sign_in_account,
         inputs=[email_input, password_input],
