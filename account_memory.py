@@ -303,6 +303,7 @@ def _normalize_memory(data):
                 "age_group": str(age_group or "elementary")[:40],
                 "adult_learner_consent": registration_setup.get("adult_learner_consent") is True,
                 "created_at": str(registration_setup.get("created_at") or "")[:40],
+                "self_learner_id": str(registration_setup.get("self_learner_id") or "")[:64],
             }
     result["updated_at"] = data.get("updated_at")
     return result
