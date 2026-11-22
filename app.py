@@ -1904,11 +1904,11 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             student_activity_status = gr.Markdown("Choose your learner profile in Parent view before starting.")
             chatbot = gr.Chatbot(label="Your learning conversation")
             support_mode = gr.Radio(
-            choices=[("Tutor", "tutor"), ("Wellbeing companion", "wellbeing")],
-            value="tutor",
-            label="How can XEMEX help?",
-        )
-        message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
+                choices=[("Tutor", "tutor"), ("Wellbeing companion", "wellbeing")],
+                value="tutor",
+                label="How can XEMEX help?",
+            )
+            message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
             with gr.Row():
                 send_button = gr.Button("Send", variant="primary")
                 clear = gr.Button("Clear conversation")
