@@ -266,6 +266,32 @@ def get_student_parent_controls(student_session):
         return None, "Could not load parent settings: " + str(error)[:200]
 
 
+def export_parent_student_data(parent_session):
+    """Return child-owned student data without credential hashes or secrets."""
+    parent_session, status = parent_store.ensure_valid_session(parent_session)
+    if not parent_session:
+        return [], status
+    try:
+        rows = _request("GET", "student_accounts", params={
+            "parent_user_id": "eq." + parent_session["user_id"],
+            "select": "username,email,learner_id,memory_data,created_at,updated_at",
+            "limit": "100",
+        })
+        safe_rows = []
+        for row in rows:
+            safe_rows.append({
+                "username": row.get("username", ""),
+                "email": row.get("email") or "",
+                "learner_id": row.get("learner_id", ""),
+                "memory_data": row.get("memory_data") if isinstance(row.get("memory_data"), dict) else {},
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            })
+        return safe_rows, "Student account data exported without password hashes."
+    except (RuntimeError, requests.RequestException) as error:
+        return [], "Student account export unavailable: " + str(error)[:180]
+
+
 def get_parent_student_progress(parent_session, learner_id):
     parent_session, _ = parent_store.ensure_valid_session(parent_session)
     if not parent_session:
