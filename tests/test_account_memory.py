@@ -44,7 +44,9 @@ class AccountMemoryTests(unittest.TestCase):
             "user_id": "11111111-1111-4111-8111-111111111111",
             "access_token": "test-user-jwt",
         }
-        ok, message = account_memory.save_user_memory(session, {"facts": ["private fact"]})
+        with patch.object(account_memory, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(account_memory, "SUPABASE_KEY", "sb_publishable_test"):
+            ok, message = account_memory.save_user_memory(session, {"facts": ["private fact"]})
         self.assertTrue(ok, message)
         self.assertEqual(mock_post.call_args.kwargs["json"]["user_id"], session["user_id"])
         self.assertEqual(
