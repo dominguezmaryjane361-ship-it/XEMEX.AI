@@ -275,12 +275,10 @@ def _normalize_memory(data):
             locked_until = learner.get("pin_locked_until", 0)
             if not isinstance(locked_until, (int, float)):
                 locked_until = 0
-            cleaned_learners.append({
+            cleaned_learner = {
                 "id": learner_id,
                 "name": learner_name,
                 "age_group": age_group,
-                "age": (learner.get("age") if isinstance(learner.get("age"), int) and not isinstance(learner.get("age"), bool) and 0 <= learner.get("age") <= 120 else None),
-                "is_self": learner.get("is_self") is True,
                 "student_pin": pin_record,
                 "pin_failed_attempts": min(attempts, 5),
                 "pin_locked_until": max(0, float(locked_until)),
@@ -289,14 +287,20 @@ def _normalize_memory(data):
                     "allow_hints": allow_hints,
                     "daily_activity_limit": daily_limit,
                 },
-            })
+            }
+            learner_age = learner.get("age")
+            if isinstance(learner_age, int) and not isinstance(learner_age, bool) and 0 <= learner_age <= 120:
+                cleaned_learner["age"] = learner_age
+            if learner.get("is_self") is True:
+                cleaned_learner["is_self"] = True
+            cleaned_learners.append(cleaned_learner)
         result["learners"] = cleaned_learners
     registration_setup = data.get("registration_setup")
     if isinstance(registration_setup, dict):
         setup_for = registration_setup.get("setup_for")
         age = registration_setup.get("learner_age")
         age_group = registration_setup.get("age_group")
-        if setup_for in ("self", "child") and isinstance(age, int) and not isinstance(age, bool) and 3 <= age <= 120:
+        if setup_for in ("self", "child") and isinstance(age, int) and not isinstance(age, bool) and 0 <= age <= 120:
             result["registration_setup"] = {
                 "setup_for": setup_for,
                 "learner_age": age,
