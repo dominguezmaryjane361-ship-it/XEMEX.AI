@@ -810,18 +810,18 @@ def set_learner_student_pin(learner_id, pin, confirm_pin, session, account_data)
 def unlock_student_workspace(learner_id, pin, session, account_data):
     session, status = _renew_account_session(session)
     if not session:
-        return None, status, session, gr.update(visible=False)
+        return None, status, session, gr.update(visible=False), gr.update(visible=True)
     learner = next((item for item in (account_data or {}).get("learners", [])
                     if item.get("id") == learner_id), None)
     if not learner:
-        return None, "Choose your learner profile.", session, gr.update(visible=False)
+        return None, "Choose your learner profile.", session, gr.update(visible=False), gr.update(visible=True)
     if not learner.get("student_pin"):
-        return None, "A parent must set a student PIN in Parent view first.", session, gr.update(visible=False)
+        return None, "A parent must set a student PIN in Parent view first.", session, gr.update(visible=False), gr.update(visible=True)
     now = time.time()
     locked_until = float(learner.get("pin_locked_until", 0) or 0)
     if locked_until > now:
         remaining = max(1, int((locked_until - now + 59) // 60))
-        return None, "Too many incorrect attempts. Try again in about " + str(remaining) + " minute(s).", session, gr.update(visible=False)
+        return None, "Too many incorrect attempts. Try again in about " + str(remaining) + " minute(s).", session, gr.update(visible=False), gr.update(visible=True)
     if not verify_pin(pin, learner.get("student_pin")):
         attempts = int(learner.get("pin_failed_attempts", 0)) + 1
         learner["pin_failed_attempts"] = attempts
@@ -832,12 +832,12 @@ def unlock_student_workspace(learner_id, pin, session, account_data):
         else:
             message = "That PIN is not correct. Please try again."
         account_store.save_user_memory(session, account_data)
-        return None, message, session, gr.update(visible=False)
+        return None, message, session, gr.update(visible=False), gr.update(visible=True)
     learner["pin_failed_attempts"] = 0
     learner["pin_locked_until"] = 0
     account_store.save_user_memory(session, account_data)
     access = {"learner_id": learner_id, "account_user_id": session.get("user_id")}
-    return access, "Welcome, " + learner.get("name", "learner") + "! Your learning space is unlocked.", session, gr.update(visible=True)
+    return access, "Welcome, " + learner.get("name", "learner") + "! Your learning space is unlocked.", session, gr.update(visible=True), gr.update(visible=False)
 
 
 def learner_profile_choices(account_data):
@@ -850,10 +850,12 @@ def learner_profile_choices(account_data):
 def switch_xemex_view(view, student_access):
     is_parent = view == "parent"
     unlocked = isinstance(student_access, dict) and bool(student_access.get("learner_id"))
+    next_access = None if is_parent else student_access
     return (
         gr.update(visible=is_parent),
         gr.update(visible=(not is_parent and unlocked)),
         gr.update(visible=(not is_parent and not unlocked)),
+        next_access,
     )
 
 
@@ -1397,7 +1399,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
     view_mode.change(
         switch_xemex_view,
         inputs=[view_mode, student_access_state],
-        outputs=[parent_tools_column, student_workspace_column, student_lock_column],
+        outputs=[parent_tools_column, student_workspace_column, student_lock_column, student_access_state],
     )
     account_memory_state.change(
         learner_profile_choices,
@@ -1407,14 +1409,14 @@ with gr.Blocks(title="XEMEX.AI") as app:
     unlock_student_button.click(
         unlock_student_workspace,
         inputs=[student_profile, student_pin_input, session_state, account_memory_state],
-        outputs=[student_access_state, student_lock_status, session_state, student_workspace_column],
+        outputs=[student_access_state, student_lock_status, session_state, student_workspace_column, student_lock_column],
     )
     save_student_pin_button.click(
         set_learner_student_pin,
         inputs=[learner_profile, parent_pin_input, parent_pin_confirm, session_state, account_memory_state],
         outputs=[account_memory_state, student_pin_status, session_state],
     )
-    chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal]
+    chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal, student_access_state, student_profile]
     chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
     message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
