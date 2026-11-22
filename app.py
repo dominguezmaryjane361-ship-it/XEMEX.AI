@@ -680,6 +680,76 @@ def sign_out_account(session):
     return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
 
 
+def _parent_control_status(account_data, learner_id, activity_type):
+    learner = next(
+        (item for item in (account_data or {}).get("learners", []) if item.get("id") == learner_id),
+        None,
+    )
+    if not learner:
+        return "Choose a learner profile before starting."
+    controls = learner.get("parent_controls") or {}
+    if activity_type == "practice" and controls.get("allow_practice", True) is not True:
+        return "A parent has paused practice activities for this learner."
+    if activity_type == "hint" and controls.get("allow_hints", True) is not True:
+        return "A parent has paused hints for this learner."
+    limit = controls.get("daily_activity_limit", 20)
+    if limit not in (0, 5, 10, 15, 20, 30):
+        limit = 20
+    if limit:
+        today = datetime.now(timezone.utc).date().isoformat()
+        used = sum(
+            1 for item in account_data.get("learning_progress", [])
+            if item.get("learner_id") == learner_id
+            and item.get("status") in ("introduced", "hint_requested")
+            and str(item.get("timestamp") or "").startswith(today)
+        )
+        if used >= limit:
+            return "This learner has reached today's activity limit set by their parent."
+    return ""
+
+
+def save_parent_controls(learner_id, allow_practice, allow_hints, daily_limit, session, account_data):
+    session, session_status = _renew_account_session(session)
+    if not session:
+        return account_data, session_status, None
+    if not isinstance(account_data, dict):
+        account_data = account_store.default_user_memory()
+    learner = next(
+        (item for item in account_data.get("learners", []) if item.get("id") == learner_id),
+        None,
+    )
+    if not learner:
+        return account_data, "Choose a learner profile first.", session
+    try:
+        daily_limit = int(daily_limit)
+    except (TypeError, ValueError):
+        daily_limit = 20
+    if daily_limit not in (0, 5, 10, 15, 20, 30):
+        daily_limit = 20
+    learner["parent_controls"] = {
+        "allow_practice": bool(allow_practice),
+        "allow_hints": bool(allow_hints),
+        "daily_activity_limit": daily_limit,
+    }
+    saved, status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        return account_data, "Parent controls could not be saved: " + status, session
+    return account_data, "Parent safety settings saved for " + learner.get("name", "this learner") + ".", session
+
+
+def load_parent_controls(learner_id, account_data):
+    learner = next(
+        (item for item in (account_data or {}).get("learners", []) if item.get("id") == learner_id),
+        None,
+    )
+    controls = (learner or {}).get("parent_controls") or {}
+    return (
+        controls.get("allow_practice", True),
+        controls.get("allow_hints", True),
+        str(controls.get("daily_activity_limit", 20)),
+    )
+
+
 def create_learner_profile(name, age_group, session, account_data):
     session, session_status = _renew_account_session(session)
     if not session:
@@ -698,6 +768,11 @@ def create_learner_profile(name, age_group, session, account_data):
         "id": str(uuid.uuid4()),
         "name": name,
         "age_group": str(age_group or "elementary")[:40],
+        "parent_controls": {
+            "allow_practice": True,
+            "allow_hints": True,
+            "daily_activity_limit": 20,
+        },
     }
     learners.append(learner)
     saved, status = account_store.save_user_memory(session, account_data)
@@ -725,6 +800,9 @@ def start_tutoring_lesson(topic, history, session, account_data, age_group, subj
         return history, account_data, "Enter a topic for the lesson first.", topic, session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
+    control_message = _parent_control_status(account_data, learner_id, "practice")
+    if control_message:
+        return history, account_data, control_message, topic, session
 
     account_data["tutor_settings"] = {
         "age_group": str(age_group or "elementary")[:40],
@@ -909,6 +987,9 @@ def generate_student_activity(activity_type, topic, history, session, account_da
     )
     if not learner:
         return history, account_data, "Choose a learner profile before starting student activities.", session
+    control_message = _parent_control_status(account_data, learner_id, activity_type)
+    if control_message:
+        return history, account_data, control_message, session
 
     learner_age = learner.get("age_group", age_group or "elementary")
     activity = "hint" if activity_type == "hint" else "practice"
@@ -930,16 +1011,15 @@ def generate_student_activity(activity_type, topic, history, session, account_da
         "assistant": reply,
     })
     account_data["chat_history"] = account_data["chat_history"][-100:]
-    if activity == "practice":
-        account_data.setdefault("learning_progress", []).append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "subject": str(subject or "general learning")[:100],
-            "topic": topic,
-            "age_group": str(learner_age)[:40],
-            "learner_id": str(learner_id)[:64],
-            "status": "introduced",
-        })
-        account_data["learning_progress"] = account_data["learning_progress"][-100:]
+    account_data.setdefault("learning_progress", []).append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "subject": str(subject or "general learning")[:100],
+        "topic": topic,
+        "age_group": str(learner_age)[:40],
+        "learner_id": str(learner_id)[:64],
+        "status": "introduced" if activity == "practice" else "hint_requested",
+    })
+    account_data["learning_progress"] = account_data["learning_progress"][-100:]
     saved, save_status = account_store.save_user_memory(session, account_data)
     if not saved:
         save_status = "Warning: " + save_status
@@ -1170,6 +1250,18 @@ with gr.Blocks(title="XEMEX.AI") as app:
             gr.Markdown("### Parent dashboard")
             refresh_dashboard_button = gr.Button("Refresh parent dashboard")
             parent_dashboard = gr.Markdown("Choose a learner profile, then refresh the dashboard.")
+            gr.Markdown("### Parent safety controls")
+            parent_allow_practice = gr.Checkbox(label="Allow practice activities", value=True)
+            parent_allow_hints = gr.Checkbox(label="Allow hints", value=True)
+            parent_daily_limit = gr.Dropdown(
+                choices=[("5 activities per day", "5"), ("10 activities per day", "10"),
+                         ("15 activities per day", "15"), ("20 activities per day", "20"),
+                         ("30 activities per day", "30"), ("No daily activity cap", "0")],
+                value="20",
+                label="Daily learning activity limit",
+            )
+            save_parent_controls_button = gr.Button("Save parent safety settings")
+            parent_controls_status = gr.Markdown("Settings apply to the selected learner's practice and hint activities.")
         with gr.Accordion("Student learning workspace", open=True):
             gr.Markdown("A focused space for age-appropriate practice, helpful hints, and learning one step at a time.")
             student_topic = gr.Textbox(label="What would you like to learn?", placeholder="For example: multiplication, planets, or reading")
@@ -1255,6 +1347,19 @@ with gr.Blocks(title="XEMEX.AI") as app:
         select_learner_profile,
         inputs=[learner_profile, account_memory_state],
         outputs=[learner_age_group, learner_profile_status],
+    )
+    learner_profile.change(
+        load_parent_controls,
+        inputs=[learner_profile, account_memory_state],
+        outputs=[parent_allow_practice, parent_allow_hints, parent_daily_limit],
+    )
+    save_parent_controls_button.click(
+        save_parent_controls,
+        inputs=[
+            learner_profile, parent_allow_practice, parent_allow_hints,
+            parent_daily_limit, session_state, account_memory_state,
+        ],
+        outputs=[account_memory_state, parent_controls_status, session_state],
     )
 
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
