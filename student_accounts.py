@@ -255,6 +255,7 @@ def get_student_parent_controls(student_session):
             return None, "This student profile is no longer linked to the parent account."
         controls = learner.get("parent_controls") or {}
         return {
+            "allow_chat": controls.get("allow_chat", True) is True,
             "allow_practice": controls.get("allow_practice", True) is True,
             "allow_hints": controls.get("allow_hints", True) is True,
             "daily_activity_limit": controls.get("daily_activity_limit", 20),
