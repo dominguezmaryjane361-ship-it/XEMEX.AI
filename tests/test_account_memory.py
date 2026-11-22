@@ -26,6 +26,19 @@ class AccountMemoryTests(unittest.TestCase):
         self.assertEqual(data["interaction_count"], 9)
         self.assertEqual(data["emotional_state"]["trust"], 1.0)
 
+    def test_tutoring_data_is_account_scoped_and_bounded(self):
+        data = account_memory._normalize_memory({
+            "tutor_settings": {
+                "age_group": "teen",
+                "subject": "Science",
+                "learning_goal": "Understand ecosystems",
+            },
+            "learning_progress": [{"topic": str(i)} for i in range(125)],
+        })
+        self.assertEqual(data["tutor_settings"]["age_group"], "teen")
+        self.assertEqual(data["tutor_settings"]["subject"], "Science")
+        self.assertEqual(len(data["learning_progress"]), 100)
+
     def test_user_file_requires_uuid(self):
         with self.assertRaises(ValueError):
             account_memory._user_file("../../other-user")
