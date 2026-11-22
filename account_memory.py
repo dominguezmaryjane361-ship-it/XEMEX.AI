@@ -244,10 +244,27 @@ def _normalize_memory(data):
             if not learner_id or not learner_name or learner_id in seen_ids:
                 continue
             seen_ids.add(learner_id)
+            controls = learner.get("parent_controls")
+            if not isinstance(controls, dict):
+                controls = {}
+            allow_practice = controls.get("allow_practice", True)
+            allow_hints = controls.get("allow_hints", True)
+            daily_limit = controls.get("daily_activity_limit", 20)
+            if not isinstance(allow_practice, bool):
+                allow_practice = True
+            if not isinstance(allow_hints, bool):
+                allow_hints = True
+            if daily_limit not in (0, 5, 10, 15, 20, 30):
+                daily_limit = 20
             cleaned_learners.append({
                 "id": learner_id,
                 "name": learner_name,
                 "age_group": age_group,
+                "parent_controls": {
+                    "allow_practice": allow_practice,
+                    "allow_hints": allow_hints,
+                    "daily_activity_limit": daily_limit,
+                },
             })
         result["learners"] = cleaned_learners
     result["updated_at"] = data.get("updated_at")
