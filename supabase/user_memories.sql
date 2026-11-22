@@ -11,7 +11,7 @@ ALTER TABLE public.user_memories
 ALTER TABLE public.user_memories
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
-DO $
+DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
@@ -24,7 +24,7 @@ BEGIN
             FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
     END IF;
 END
-$;
+$$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_memories_user_id_unique
     ON public.user_memories (user_id);
@@ -35,7 +35,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.user_memories TO authenticated;
 GRANT ALL ON TABLE public.user_memories TO service_role;
 
 -- Remove pre-existing policies first: permissive RLS policies are ORed together.
-DO $
+DO $$
 DECLARE policy_row RECORD;
 BEGIN
     FOR policy_row IN
@@ -45,7 +45,7 @@ BEGIN
         EXECUTE format('DROP POLICY %I ON public.user_memories', policy_row.policyname);
     END LOOP;
 END
-$;
+$$;
 
 CREATE POLICY "Users can read their own XEMEX memory"
     ON public.user_memories FOR SELECT TO authenticated
