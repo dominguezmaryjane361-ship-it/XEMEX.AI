@@ -78,9 +78,9 @@ def _verify_password(password, record):
         return False
 
 
-def _student_defaults(username, email=None):
+def _student_defaults(username, email=None, learner_name="", age_group="elementary"):
     return {
-        "profile": {"username": username, "email": email or ""},
+        "profile": {"username": username, "email": email or "", "learner_name": learner_name, "age_group": age_group},
         "facts": [],
         "chat_history": [],
         "learning_progress": [],
@@ -161,7 +161,7 @@ def create_student_account(parent_session, learner_id, username, password, email
             "password_salt": salt,
             "password_hash": digest,
             "password_iterations": rounds,
-            "memory_data": _student_defaults(username, email),
+            "memory_data": _student_defaults(username, email, learner.get("name", ""), learner.get("age_group", "elementary")),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         if existing:
@@ -215,6 +215,35 @@ def reset_student_password(parent_session, learner_id, new_password):
         return True, "Student password reset."
     except (ValueError, RuntimeError, requests.RequestException) as error:
         return False, "Could not reset student password: " + str(error)[:220]
+
+
+def get_student_parent_controls(student_session):
+    payload = validate_student_session(student_session)
+    if not payload:
+        return None, "Student session expired. Sign in again."
+    try:
+        rows = _request("GET", "user_memories", params={
+            "user_id": "eq." + payload["pid"],
+            "select": "memory_data",
+            "limit": "1",
+        })
+        if not rows:
+            return None, "Parent settings could not be loaded."
+        data = rows[0].get("memory_data") or {}
+        learner = next((item for item in data.get("learners", [])
+                        if item.get("id") == payload["lid"]), None)
+        if not learner:
+            return None, "This student profile is no longer linked to the parent account."
+        controls = learner.get("parent_controls") or {}
+        return {
+            "allow_practice": controls.get("allow_practice", True) is True,
+            "allow_hints": controls.get("allow_hints", True) is True,
+            "daily_activity_limit": controls.get("daily_activity_limit", 20),
+            "learner_name": learner.get("name", "Student"),
+            "age_group": learner.get("age_group", "elementary"),
+        }, "Parent settings loaded."
+    except (RuntimeError, requests.RequestException) as error:
+        return None, "Could not load parent settings: " + str(error)[:200]
 
 
 def load_student_memory(student_session):
