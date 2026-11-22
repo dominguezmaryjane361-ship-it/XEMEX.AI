@@ -36,7 +36,7 @@ ALTER TABLE public.student_accounts ENABLE ROW LEVEL SECURITY;
 
 -- Remove any older policies. Student credentials and histories are accessed
 -- only by the server through SUPABASE_SERVICE_ROLE_KEY.
-DO $
+DO $$
 DECLARE policy_row RECORD;
 BEGIN
     FOR policy_row IN
@@ -46,7 +46,7 @@ BEGIN
         EXECUTE format('DROP POLICY %I ON public.student_accounts', policy_row.policyname);
     END LOOP;
 END
-$;
+$$;
 
 REVOKE ALL ON TABLE public.student_accounts FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.student_accounts TO service_role;
