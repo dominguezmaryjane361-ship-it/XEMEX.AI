@@ -8,6 +8,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -79,6 +80,7 @@ def sign_up(email, password):
             "refresh_token": session.get("refresh_token", ""),
             "user_id": user.get("id"),
             "email": user.get("email", email),
+            "expires_at": time.time() + max(0, int(session.get("expires_in", 3600)) - 60),
         }, "Account created. You are signed in."
     except (requests.RequestException, RuntimeError) as error:
         return None, "Sign-up failed: {}".format(error)
@@ -107,6 +109,7 @@ def sign_in(email, password):
             "refresh_token": data.get("refresh_token", ""),
             "user_id": user_id,
             "email": user.get("email", email),
+            "expires_at": time.time() + max(0, int(data.get("expires_in", 3600)) - 60),
         }, "Signed in successfully."
     except (requests.RequestException, RuntimeError) as error:
         return None, "Sign-in failed: {}".format(error)
@@ -131,9 +134,27 @@ def refresh_session(session):
             "refresh_token": data.get("refresh_token", session["refresh_token"]),
             "user_id": user.get("id") or session.get("user_id"),
             "email": user.get("email") or session.get("email", ""),
+            "expires_at": time.time() + max(0, int(data.get("expires_in", 3600)) - 60),
         }
     except (requests.RequestException, RuntimeError):
         return None
+
+
+def ensure_valid_session(session):
+    """Refresh a Supabase session shortly before expiry.
+
+    Returns (session, status). A failed refresh never silently reuses an
+    expired access token; the caller must ask the user to sign in again.
+    """
+    if not isinstance(session, dict) or not session.get("access_token"):
+        return None, "Please sign in again."
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, (int, float)) and expires_at > time.time():
+        return session, "Session active."
+    refreshed = refresh_session(session)
+    if not refreshed or refreshed.get("user_id") != session.get("user_id"):
+        return None, "Your session expired. Please sign in again."
+    return refreshed, "Your session was securely renewed."
 
 
 def sign_out(session):
