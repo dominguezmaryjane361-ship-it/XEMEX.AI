@@ -891,6 +891,16 @@ def independent_student_activity(activity_type, topic, history, student_session,
         return history, student_memory, "Your student session expired. Sign in again."
     if not topic:
         return history, student_memory, "Enter a topic first."
+    urgent_reply = crisis_response(topic)
+    if urgent_reply:
+        memory = student_memory if isinstance(student_memory, dict) else {}
+        memory.setdefault("chat_history", []).extend([
+            {"role": "user", "content": topic},
+            {"role": "assistant", "content": urgent_reply},
+        ])
+        memory["chat_history"] = memory["chat_history"][-100:]
+        saved, status = student_accounts.save_student_memory(student_session, memory)
+        return history + [{"role": "assistant", "content": urgent_reply}], memory, status if saved else "Safety response shown; saving needs attention: " + status
     controls, control_status = student_accounts.get_student_parent_controls(student_session)
     if not controls:
         return history, student_memory, control_status
@@ -1350,6 +1360,19 @@ def generate_student_activity(activity_type, topic, history, session, account_da
         return history, account_data, session_status, session
     if not topic:
         return history, account_data, "Enter a topic first.", session
+    urgent_reply = crisis_response(topic)
+    if urgent_reply:
+        if not isinstance(account_data, dict):
+            account_data = account_store.default_user_memory()
+        history = (history or []) + [{"role": "assistant", "content": urgent_reply}]
+        account_data.setdefault("chat_history", []).append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user": topic,
+            "assistant": urgent_reply,
+        })
+        account_data["chat_history"] = account_data["chat_history"][-100:]
+        saved, status = account_store.save_user_memory(session, account_data)
+        return history, account_data, status if saved else "Safety response shown; saving needs attention: " + status, session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
     if (not isinstance(student_access, dict)
