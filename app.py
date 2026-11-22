@@ -670,7 +670,47 @@ def sign_out_account(session):
     return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False)
 
 
-def chat_with_xemex(message, history, session, account_data):
+def start_tutoring_lesson(topic, history, session, account_data, age_group, subject):
+    history = history or []
+    topic = (topic or "").strip()
+    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
+        return history, account_data, "Please sign in before starting a lesson.", topic
+    if not topic:
+        return history, account_data, "Enter a topic for the lesson first.", topic
+    if not isinstance(account_data, dict):
+        account_data = account_store.default_user_memory()
+
+    prompt = build_lesson_prompt(
+        subject=subject or "general learning",
+        topic=topic,
+        age_group=age_group or "elementary",
+    )
+    reply = ask_llm(prompt)
+    if reply.startswith(("Groq returned HTTP", "I couldn't reach", "XEMEX is not connected")):
+        return history, account_data, reply, topic
+
+    history = history + [{"role": "assistant", "content": reply}]
+    account_data.setdefault("chat_history", []).append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user": "Start an interactive lesson: " + topic,
+        "assistant": reply,
+    })
+    account_data["chat_history"] = account_data["chat_history"][-100:]
+    account_data.setdefault("learning_progress", []).append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "subject": str(subject or "general learning")[:100],
+        "topic": topic[:200],
+        "age_group": str(age_group or "elementary")[:40],
+        "status": "introduced",
+    })
+    account_data["learning_progress"] = account_data["learning_progress"][-100:]
+    saved, status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        status = "Warning: " + status
+    return history, account_data, status, ""
+
+
+def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic"):
     message = (message or "").strip()
     history = history or []
     if not message:
@@ -721,6 +761,29 @@ def chat_with_xemex(message, history, session, account_data):
         system_prompt = memory["system_prompt"]
         discoveries = "\n".join(str(item) for item in memory["learned_knowledge"][-5:]) or "No independent explorations yet."
 
+    account_data["tutor_settings"] = {
+        "age_group": str(age_group or "elementary")[:40],
+        "subject": str(subject or "general learning")[:100],
+        "learning_goal": str(learning_goal or "understand the topic")[:250],
+    }
+    tutor_context = ""
+    if tutor_enabled:
+        age_for_support = {
+            "preschool": 4,
+            "early_elementary": 7,
+            "elementary": 10,
+            "teen": 15,
+        }.get(age_group, 10)
+        tutor_context = (
+            build_teaching_prompt(
+                age_group=age_group,
+                subject=subject,
+                learning_goal=learning_goal,
+            )
+            + "\n\n"
+            + build_learning_support_prompt(age=age_for_support)
+        )
+
     lower_message = message.lower()
     coding_request = (
         lower_message.startswith("/code")
@@ -745,6 +808,7 @@ def chat_with_xemex(message, history, session, account_data):
             "Never claim a fixed training cutoff unless it is verified.\n"
             "Never claim to remember information that is not supplied here.\n\n"
             f"Recent general XEMEX explorations:\n{discoveries}\n\n"
+            f"{tutor_context}\n\n"
             "Do not reveal or infer information from another account. "
             "Use only the current account's supplied context for personal details."
         )
@@ -832,6 +896,22 @@ with gr.Blocks(title="XEMEX.AI") as app:
 
     with gr.Column(visible=False) as chat_panel:
         account_status = gr.Markdown("Signed in.")
+        with gr.Accordion("Tutor settings", open=False):
+            tutor_mode = gr.Checkbox(label="Enable child and teen tutoring mode", value=False)
+            learner_age_group = gr.Dropdown(
+                choices=[
+                    ("Preschool (3–5)", "preschool"),
+                    ("Early elementary (6–8)", "early_elementary"),
+                    ("Elementary (9–12)", "elementary"),
+                    ("Teen (13–17)", "teen"),
+                ],
+                value="elementary",
+                label="Learner age group",
+            )
+            learner_subject = gr.Textbox(label="Subject", value="General learning")
+            learner_goal = gr.Textbox(label="Learning goal", value="Understand the topic")
+            lesson_topic = gr.Textbox(label="Start a lesson on", placeholder="For example: fractions, reading, or planets")
+            lesson_button = gr.Button("Create an interactive lesson")
         chatbot = gr.Chatbot(label="Conversation", type="messages")
         message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
         with gr.Row():
@@ -854,10 +934,15 @@ with gr.Blocks(title="XEMEX.AI") as app:
         outputs=auth_outputs,
     )
 
-    chat_inputs = [message, chatbot, session_state, account_memory_state]
+    chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal]
     chat_outputs = [chatbot, message, account_memory_state, account_status]
     message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
+    lesson_button.click(
+        start_tutoring_lesson,
+        inputs=[lesson_topic, chatbot, session_state, account_memory_state, learner_age_group, learner_subject],
+        outputs=[chatbot, account_memory_state, account_status, lesson_topic],
+    )
 
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
 
