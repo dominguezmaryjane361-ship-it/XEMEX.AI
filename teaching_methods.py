@@ -341,6 +341,9 @@ def normalize_age_group(age_group: str) -> str:
         "13-17": "teen",
         "teen": "teen",
         "teenager": "teen",
+        "adult": "adult",
+        "college": "adult",
+        "18+": "adult",
     }
 
     return aliases.get(value, "elementary")
