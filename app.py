@@ -856,14 +856,14 @@ def export_account_data(session, parent_access):
         return None, "Could not create the export file: " + str(error)[:180]
 
 
-def delete_account_from_settings(password, confirmation, session, parent_access, account_data, history):
+def delete_account_from_settings(password, confirmation, session, parent_access, account_data, history, student_access):
     if confirmation != "DELETE":
-        return session, account_data, history, "Type DELETE exactly to confirm account deletion.", gr.update(), gr.update(), gr.update(), gr.update()
+        return session, account_data, history, "Type DELETE exactly to confirm account deletion.", gr.update(), gr.update(), student_access, parent_access
     if not _parent_access_valid(parent_access, session):
-        return session, account_data, history, "Unlock Parent tools again before deleting this account.", gr.update(), gr.update(), gr.update(), gr.update()
+        return session, account_data, history, "Unlock Parent tools again before deleting this account.", gr.update(), gr.update(), student_access, parent_access
     success, status = account_store.delete_user_account(session, password)
     if not success:
-        return session, account_data, history, status, gr.update(), gr.update(), gr.update(), gr.update()
+        return session, account_data, history, status, gr.update(), gr.update(), student_access, parent_access
     return None, account_store.default_user_memory(), [], status, gr.update(visible=True), gr.update(visible=False), None, None
 
 
@@ -2039,7 +2039,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     delete_account_button.click(
         delete_account_from_settings,
-        inputs=[delete_account_password, delete_account_confirmation, session_state, parent_access_state, account_memory_state, chatbot],
+        inputs=[delete_account_password, delete_account_confirmation, session_state, parent_access_state, account_memory_state, chatbot, student_access_state],
         outputs=[session_state, account_memory_state, chatbot, delete_account_status, login_panel, chat_panel, student_access_state, parent_access_state],
     )
     account_memory_state.change(
