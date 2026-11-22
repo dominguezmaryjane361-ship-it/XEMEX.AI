@@ -37,6 +37,7 @@ import gradio as gr
 import account_memory as account_store
 from student_learning import build_student_activity_prompt
 from student_access import make_pin_record, verify_pin
+import student_accounts
 
 
 # Optional web search
@@ -684,6 +685,133 @@ def sign_out_account(session):
 def sign_out_account_and_lock_student(session):
     outputs = sign_out_account(session)
     return (*outputs, None, None)
+
+
+
+def create_independent_student_login(learner_id, username, email, password, session):
+    result, status = student_accounts.create_student_account(
+        session, learner_id, username, password, email
+    )
+    return status, session
+
+
+def reset_independent_student_password(learner_id, new_password, session):
+    success, status = student_accounts.reset_student_password(
+        session, learner_id, new_password
+    )
+    return status, session
+
+
+def sign_in_independent_student(identifier, password):
+    student_session, status = student_accounts.sign_in_student(identifier, password)
+    if not student_session:
+        return None, {}, [], status, gr.update(visible=True), gr.update(visible=False)
+    memory, memory_status = student_accounts.load_student_memory(student_session)
+    if memory is None:
+        return None, {}, [], memory_status, gr.update(visible=True), gr.update(visible=False)
+    history = memory.get("chat_history", [])
+    safe_history = [
+        item for item in history[-50:]
+        if isinstance(item, dict) and item.get("role") in ("user", "assistant")
+        and isinstance(item.get("content"), str)
+    ]
+    return student_session, memory, safe_history, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True)
+
+
+def independent_student_chat(message, history, student_session, student_memory):
+    message = str(message or "").strip()[:4000]
+    history = history or []
+    if not message:
+        return history, "", student_memory, "Enter a message first."
+    if not student_accounts.validate_student_session(student_session):
+        return history, "", student_memory, "Your student session expired. Sign in again."
+    memory = student_memory if isinstance(student_memory, dict) else {}
+    profile = memory.get("profile") if isinstance(memory.get("profile"), dict) else {}
+    age_group = str(profile.get("age_group", "elementary"))[:40]
+    safe_history = [
+        item for item in history[-16:]
+        if isinstance(item, dict) and item.get("role") in ("user", "assistant")
+        and isinstance(item.get("content"), str)
+    ]
+    prompt = (
+        "You are XEMEX, a kind, age-appropriate learning companion for a student. "
+        "Adapt language to age group: " + age_group + ". "
+        "Teach step by step and ask one question at a time. Never ask for passwords, "
+        "addresses, school names, contact details, or secrets. Do not encourage hiding "
+        "things from parents or trusted adults. If the student describes danger, encourage "
+        "them to tell a trusted adult or contact emergency help. Do not shame, diagnose, "
+        "or present yourself as a human. Keep explanations clear and encouraging."
+    )
+    reply = ask_llm([{"role": "system", "content": prompt}] + safe_history + [
+        {"role": "user", "content": message}
+    ])
+    if reply.startswith(("Groq returned HTTP", "I couldn't reach", "XEMEX is not connected")):
+        return history, "", memory, reply
+    updated_history = safe_history + [
+        {"role": "user", "content": message},
+        {"role": "assistant", "content": reply},
+    ]
+    memory["chat_history"] = updated_history[-100:]
+    memory["interaction_count"] = int(memory.get("interaction_count", 0)) + 1
+    saved, status = student_accounts.save_student_memory(student_session, memory)
+    return updated_history, "", memory, status if saved else "Warning: " + status
+
+
+def independent_student_activity(activity_type, topic, history, student_session, student_memory):
+    history = history or []
+    topic = str(topic or "").strip()[:200]
+    if not student_accounts.validate_student_session(student_session):
+        return history, student_memory, "Your student session expired. Sign in again."
+    if not topic:
+        return history, student_memory, "Enter a topic first."
+    controls, control_status = student_accounts.get_student_parent_controls(student_session)
+    if not controls:
+        return history, student_memory, control_status
+    if activity_type == "practice" and not controls["allow_practice"]:
+        return history, student_memory, "A parent has paused practice activities for this learner."
+    if activity_type == "hint" and not controls["allow_hints"]:
+        return history, student_memory, "A parent has paused hints for this learner."
+    memory = student_memory if isinstance(student_memory, dict) else {}
+    progress = memory.setdefault("learning_progress", [])
+    today = datetime.now(timezone.utc).date().isoformat()
+    todays_count = sum(
+        1 for item in progress
+        if isinstance(item, dict) and str(item.get("timestamp", "")).startswith(today)
+        and item.get("status") in ("introduced", "hint_requested")
+    )
+    limit = controls.get("daily_activity_limit", 20)
+    if limit and todays_count >= limit:
+        return history, memory, "You have reached today's learning activity limit. Ask a parent if you need help."
+    profile = memory.get("profile") if isinstance(memory.get("profile"), dict) else {}
+    age_group = controls.get("age_group", profile.get("age_group", "elementary"))
+    prompt = build_student_activity_prompt(
+        age_group=age_group,
+        subject="general learning",
+        topic=topic,
+        activity="hint" if activity_type == "hint" else "practice",
+    )
+    reply = ask_llm(prompt)
+    if reply.startswith(("Groq returned HTTP", "I couldn't reach", "XEMEX is not connected")):
+        return history, memory, reply
+    history = history + [{"role": "assistant", "content": reply}]
+    progress.append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "topic": topic,
+        "age_group": age_group,
+        "status": "hint_requested" if activity_type == "hint" else "introduced",
+    })
+    memory["learning_progress"] = progress[-100:]
+    memory.setdefault("chat_history", []).extend([
+        {"role": "user", "content": ("Give me a hint for " if activity_type == "hint" else "Help me practice ") + topic},
+        {"role": "assistant", "content": reply},
+    ])
+    memory["chat_history"] = memory["chat_history"][-100:]
+    saved, status = student_accounts.save_student_memory(student_session, memory)
+    return history, memory, status if saved else "Warning: " + status
+
+
+def sign_out_independent_student(student_session):
+    return None, {}, [], "Student signed out. Your learning is saved privately.", gr.update(visible=True), gr.update(visible=False)
 
 
 def _parent_control_status(account_data, learner_id, activity_type):
