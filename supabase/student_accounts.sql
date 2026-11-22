@@ -34,7 +34,19 @@ ALTER TABLE public.student_accounts ADD COLUMN IF NOT EXISTS locked_until BIGINT
 
 ALTER TABLE public.student_accounts ENABLE ROW LEVEL SECURITY;
 
--- No anon/authenticated policies are intentionally created.
--- The backend uses SUPABASE_SERVICE_ROLE_KEY, which bypasses RLS.
-REVOKE ALL ON TABLE public.student_accounts FROM anon, authenticated;
+-- Remove any older policies. Student credentials and histories are accessed
+-- only by the server through SUPABASE_SERVICE_ROLE_KEY.
+DO $
+DECLARE policy_row RECORD;
+BEGIN
+    FOR policy_row IN
+        SELECT policyname FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'student_accounts'
+    LOOP
+        EXECUTE format('DROP POLICY %I ON public.student_accounts', policy_row.policyname);
+    END LOOP;
+END
+$;
+
+REVOKE ALL ON TABLE public.student_accounts FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.student_accounts TO service_role;
