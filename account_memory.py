@@ -86,6 +86,25 @@ def sign_up(email, password):
         return None, "Sign-up failed: {}".format(error)
 
 
+def request_password_reset(email):
+    email = str(email or "").strip().lower()
+    if not email or "@" not in email:
+        return "Enter the email address for your XEMEX account."
+    try:
+        response = requests.post(
+            SUPABASE_URL + "/auth/v1/recover",
+            headers=_headers(),
+            json={"email": email},
+            timeout=REQUEST_TIMEOUT,
+        )
+        _response_json(response)
+        return "If an account exists for that email, Supabase will send password-reset instructions. Check your inbox and spam folder."
+    except (requests.RequestException, RuntimeError) as error:
+        # Keep the response generic so account existence is not disclosed.
+        print("Password recovery request failed:", str(error)[:180])
+        return "Password recovery is temporarily unavailable. Please try again later."
+
+
 def sign_in(email, password):
     email = (email or "").strip().lower()
     password = password or ""
