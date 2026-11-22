@@ -686,18 +686,24 @@ def send_password_reset(email):
     return account_store.request_password_reset(email)
 
 
+def create_student_self_account(email, password, age):
+    result = create_account(email, password, "self", age, "")
+    return tuple(result) + (result[3],)
+
+
 def sign_in_self_student_account(email, password):
     result = _authenticate_account(email, password, False)
     session = result[0]
     if not session:
-        return result
+        return tuple(result) + (result[3],)
     setup = (result[1] or {}).get("registration_setup") or {}
     age = setup.get("learner_age")
     if setup.get("setup_for") != "self" or not isinstance(age, int) or age < 13:
         account_store.sign_out(session)
         message = "This is not a self-managed student account. Use parent sign-in or your parent-created student username."
-        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
-    return result
+        rejected = (None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None))
+        return tuple(rejected) + (message,)
+    return tuple(result) + (result[3],)
 
 
 def restore_self_learner(session, account_data):
@@ -1799,6 +1805,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             student_self_age = gr.Number(label="Your age in years", precision=0, minimum=13, maximum=120)
             student_self_create_button = gr.Button("Create my student account")
             student_self_signin_button = gr.Button("Sign in to my student account")
+            student_self_status = gr.Markdown("")
             student_password_reset_button = gr.Button("Forgot student password?")
             student_password_reset_status = gr.Markdown("")
             student_back_button = gr.Button("Back")
@@ -1959,7 +1966,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     sign_in_button.click(
         sign_in_account,
         inputs=[email_input, password_input],
-        outputs=auth_outputs,
+        outputs=auth_outputs + [student_self_status],
     ).then(
         restore_self_learner,
         inputs=[session_state, account_memory_state],
@@ -1980,9 +1987,9 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         ],
     )
     student_self_create_button.click(
-        lambda email, password, age: create_account(email, password, "self", age, ""),
+        create_student_self_account,
         inputs=[student_self_email, student_self_password, student_self_age],
-        outputs=auth_outputs,
+        outputs=auth_outputs + [student_self_status],
     ).then(
         restore_self_learner,
         inputs=[session_state, account_memory_state],
