@@ -165,6 +165,8 @@ def create_student_account(parent_session, learner_id, username, password, email
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         if existing:
+            # Updating a login must never erase the learner's saved work.
+            payload.pop("memory_data", None)
             rows = _request("PATCH", "student_accounts", params={"id": "eq." + existing[0]["id"]},
                             payload=payload, prefer="return=representation")
         else:
@@ -184,12 +186,24 @@ def sign_in_student(identifier, password):
         field = "email" if "@" in identifier else "username"
         rows = _request("GET", "student_accounts", params={
             field: "eq." + identifier,
-            "select": "id,parent_user_id,learner_id,username,email,password_salt,password_hash,password_iterations",
+            "select": "id,parent_user_id,learner_id,username,email,password_salt,password_hash,password_iterations,failed_attempts,locked_until",
             "limit": "1",
         })
-        if not rows or not _verify_password(password, rows[0]):
+        if not rows:
             return None, "Student sign-in was not recognized. Check the username/email and password."
-        return _issue_session(rows[0]), "Student signed in."
+        record = rows[0]
+        if int(record.get("locked_until") or 0) > int(time.time()):
+            return None, "This student sign-in is temporarily locked. Try again later or ask a parent for help."
+        if not _verify_password(password, record):
+            attempts = int(record.get("failed_attempts") or 0) + 1
+            patch = {"failed_attempts": 0 if attempts >= 5 else attempts}
+            if attempts >= 5:
+                patch["locked_until"] = int(time.time()) + 900
+            _request("PATCH", "student_accounts", params={"id": "eq." + record["id"]}, payload=patch)
+            return None, "Student sign-in was not recognized. Check the username/email and password."
+        _request("PATCH", "student_accounts", params={"id": "eq." + record["id"]},
+                 payload={"failed_attempts": 0, "locked_until": 0})
+        return _issue_session(record), "Student signed in."
     except (RuntimeError, requests.RequestException) as error:
         return None, "Student sign-in unavailable: " + str(error)[:220]
 
@@ -211,6 +225,7 @@ def reset_student_password(parent_session, learner_id, new_password):
         _request("PATCH", "student_accounts", params={"id": "eq." + rows[0]["id"]},
                  payload={"password_salt": salt, "password_hash": digest,
                           "password_iterations": rounds,
+                          "failed_attempts": 0, "locked_until": 0,
                           "updated_at": datetime.now(timezone.utc).isoformat()})
         return True, "Student password reset."
     except (ValueError, RuntimeError, requests.RequestException) as error:
