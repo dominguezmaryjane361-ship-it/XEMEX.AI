@@ -39,6 +39,28 @@ class AccountMemoryTests(unittest.TestCase):
         self.assertEqual(data["tutor_settings"]["subject"], "Science")
         self.assertEqual(len(data["learning_progress"]), 100)
 
+    def test_learner_profiles_are_bounded_and_validated(self):
+        data = account_memory._normalize_memory({
+            "learners": [
+                {"id": "learner-1", "name": "Student One", "age_group": "early_elementary"},
+                {"id": "learner-1", "name": "Duplicate ID", "age_group": "teen"},
+                {"id": "learner-2", "name": " " * 2, "age_group": "teen"},
+                {"id": "learner-3", "name": "Student Three", "age_group": "teen"},
+            ],
+            "learning_progress": [
+                {"learner_id": "learner-1", "topic": "Math"},
+                {"learner_id": "learner-3", "topic": "Reading"},
+            ],
+        })
+        self.assertEqual(
+            data["learners"],
+            [
+                {"id": "learner-1", "name": "Student One", "age_group": "early_elementary"},
+                {"id": "learner-3", "name": "Student Three", "age_group": "teen"},
+            ],
+        )
+        self.assertEqual(len(data["learning_progress"]), 2)
+
     def test_user_file_requires_uuid(self):
         with self.assertRaises(ValueError):
             account_memory._user_file("../../other-user")
