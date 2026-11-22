@@ -688,14 +688,18 @@ def sign_out_account_and_lock_student(session):
 
 
 
-def create_independent_student_login(learner_id, username, email, password, session):
+def create_independent_student_login(learner_id, username, email, password, session, parent_access):
+    if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
+        return "Unlock Parent view again before creating student sign-ins.", session
     result, status = student_accounts.create_student_account(
         session, learner_id, username, password, email
     )
     return status, session
 
 
-def reset_independent_student_password(learner_id, new_password, session):
+def reset_independent_student_password(learner_id, new_password, session, parent_access):
+    if not isinstance(parent_access, dict) or parent_access.get("account_user_id") != (session or {}).get("user_id"):
+        return "Unlock Parent view again before resetting a student password.", session
     success, status = student_accounts.reset_student_password(
         session, learner_id, new_password
     )
@@ -1627,12 +1631,12 @@ with gr.Blocks(title="XEMEX.AI") as app:
     )
     create_student_login_button.click(
         create_independent_student_login,
-        inputs=[learner_profile, student_username_input, student_email_input, student_password_input, session_state],
+        inputs=[learner_profile, student_username_input, student_email_input, student_password_input, session_state, parent_access_state],
         outputs=[student_login_management_status, session_state],
     )
     reset_student_password_button.click(
         reset_independent_student_password,
-        inputs=[learner_profile, student_password_reset_input, session_state],
+        inputs=[learner_profile, student_password_reset_input, session_state, parent_access_state],
         outputs=[student_login_management_status, session_state],
     )
     chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal, student_access_state, student_profile]
