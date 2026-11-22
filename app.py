@@ -1757,7 +1757,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             registration_age = gr.Number(label="How old is the learner? (years)", precision=0, minimum=0, maximum=120)
             registration_learner_name = gr.Textbox(label="Child's name or nickname (leave blank for yourself)")
             gr.Markdown("For adult learners (18+), the adult must create their own account for now. Parent-assisted setup will require a separate adult approval step.")
-            gr.Markdown("For children under 13, verified parental consent and child-privacy safeguards must be completed before public launch.")
+            gr.Markdown("XEMEX currently blocks account creation for children under 13 until a verified parental-consent process and child-privacy safeguards are implemented and tested.")
             create_account_button = gr.Button("Create account", variant="primary")
             auth_status = gr.Markdown("Use your email and password to sign in, or complete the setup questions to create an account.")
             parent_back_button = gr.Button("Back")
@@ -1782,6 +1782,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     with gr.Column(visible=False) as independent_student_panel:
         gr.Markdown("# XEMEX Student Learning")
         gr.Markdown("Welcome! Your learning history belongs to your student account.")
+        gr.Markdown("XEMEX is an AI learning and wellbeing companion, not a therapist or emergency service. This chat is not monitored live. If someone is in immediate danger in the United States, call 911.")
         independent_student_topic = gr.Textbox(label="What would you like to learn?", placeholder="For example: multiplication, planets, or reading")
         with gr.Row():
             independent_student_practice_button = gr.Button("Start practice", variant="primary")
@@ -1799,6 +1800,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             independent_student_signout_button = gr.Button("Sign out")
     with gr.Column(visible=False) as chat_panel:
         account_status = gr.Markdown("Signed in.")
+        gr.Markdown("XEMEX is an AI learning and wellbeing companion, not a licensed counselor, therapist, or emergency service. Chats are not monitored live.")
         view_mode = gr.Radio(
             choices=[("Student view", "student"), ("Parent view", "parent")],
             value="student",
@@ -2152,5 +2154,5 @@ if __name__ == "__main__":
     app.launch(
         server_name="0.0.0.0",
         server_port=port,
-        show_error=True
+        show_error=os.environ.get("XEMEX_SHOW_ERRORS", "false").lower() == "true"
     )
