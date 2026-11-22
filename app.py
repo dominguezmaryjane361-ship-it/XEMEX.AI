@@ -39,6 +39,7 @@ from student_learning import build_student_activity_prompt
 from student_access import make_pin_record, verify_pin
 import student_accounts
 from registration_validation import validate_learner_name
+from child_safety import build_student_safety_prompt, crisis_response
 
 
 # Optional web search
@@ -726,7 +727,10 @@ def create_account(email, password, setup_for, learner_age, learner_name):
     if name_error:
         return None, account_store.default_user_memory(), [], name_error, name_error, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
     if setup_for == "self" and age < 13:
-        message = "Anyone under 13 must have a parent or guardian set up XEMEX."
+        message = "Learners under 13 cannot create their own account. A parent or guardian must complete a verified consent process before an account can be activated."
+        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+    if setup_for == "child" and age < 13:
+        message = "Accounts for children under 13 are temporarily unavailable until verified parental consent is integrated and tested. No child account has been created."
         return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
     if setup_for == "child" and age >= 18:
         message = "Adult-assisted setup is not available yet. The adult learner must create their own account until a separate consent and privacy approval step is ready."
@@ -838,7 +842,7 @@ def sign_in_independent_student(identifier, password):
     return student_session, memory, safe_history, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True)
 
 
-def independent_student_chat(message, history, student_session, student_memory):
+def independent_student_chat(message, history, student_session, student_memory, support_mode="tutor"):
     message = str(message or "").strip()[:4000]
     history = history or []
     if not message:
@@ -853,15 +857,18 @@ def independent_student_chat(message, history, student_session, student_memory):
         if isinstance(item, dict) and item.get("role") in ("user", "assistant")
         and isinstance(item.get("content"), str)
     ]
-    prompt = (
-        "You are XEMEX, a kind, age-appropriate learning companion for a student. "
-        "Adapt language to age group: " + age_group + ". "
-        "Teach step by step and ask one question at a time. Never ask for passwords, "
-        "addresses, school names, contact details, or secrets. Do not encourage hiding "
-        "things from parents or trusted adults. If the student describes danger, encourage "
-        "them to tell a trusted adult or contact emergency help. Do not shame, diagnose, "
-        "or present yourself as a human. Keep explanations clear and encouraging."
-    )
+    urgent_reply = crisis_response(message)
+    if urgent_reply:
+        updated_history = safe_history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": urgent_reply},
+        ]
+        memory["chat_history"] = updated_history[-100:]
+        memory["interaction_count"] = int(memory.get("interaction_count", 0)) + 1
+        saved, status = student_accounts.save_student_memory(student_session, memory)
+        return updated_history, "", memory, status if saved else "Safety response shown; saving needs attention: " + status
+
+    prompt = build_student_safety_prompt(age_group, support_mode)
     reply = ask_llm([{"role": "system", "content": prompt}] + safe_history + [
         {"role": "user", "content": message}
     ])
@@ -1004,13 +1011,23 @@ def load_parent_controls(learner_id, account_data):
     )
 
 
-def create_learner_profile(name, age_group, session, account_data):
+def create_learner_profile(name, learner_age, session, account_data):
     session, session_status = _renew_account_session(session)
     if not session:
         return account_data, gr.update(), session_status, None
     name = str(name or "").strip()[:80]
     if not name:
         return account_data, gr.update(), "Enter a learner name or nickname.", session
+    try:
+        age = int(learner_age)
+        if age < 0 or age > 120:
+            raise ValueError
+    except (TypeError, ValueError):
+        return account_data, gr.update(), "Enter the learner's age from 0 to 120.", session
+    if age < 13:
+        return account_data, gr.update(), "Profiles for children under 13 are unavailable until verified parental consent is integrated and tested.", session
+    if age >= 18:
+        return account_data, gr.update(), "Adult learners should create and control their own XEMEX account.", session
     if not isinstance(account_data, dict):
         account_data = account_store.default_user_memory()
     learners = account_data.setdefault("learners", [])
@@ -1021,7 +1038,8 @@ def create_learner_profile(name, age_group, session, account_data):
     learner = {
         "id": str(uuid.uuid4()),
         "name": name,
-        "age_group": str(age_group or "elementary")[:40],
+        "age": age,
+        "age_group": _age_group_for_years(age),
         "parent_controls": {
             "allow_practice": True,
             "allow_hints": True,
@@ -1384,7 +1402,7 @@ def generate_student_activity(activity_type, topic, history, session, account_da
     return history, account_data, save_status, session
 
 
-def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic", student_access=None, learner_id=None):
+def chat_with_xemex(message, history, session, account_data, tutor_enabled=False, age_group="elementary", subject="general learning", learning_goal="understand the topic", student_access=None, learner_id=None, support_mode="tutor"):
     message = (message or "").strip()
     history = history or []
     if not message:
@@ -1408,6 +1426,31 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
             role, content = item.get("role"), item.get("content")
             if role in ("user", "assistant") and isinstance(content, str):
                 safe_history.append({"role": role, "content": content})
+
+    learner_profile = next(
+        (item for item in account_data.get("learners", []) if item.get("id") == learner_id),
+        None,
+    )
+    effective_age_group = (
+        learner_profile.get("age_group")
+        if isinstance(learner_profile, dict)
+        else age_group
+    ) or age_group or "elementary"
+
+    urgent_reply = crisis_response(message)
+    if urgent_reply:
+        updated_history = safe_history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": urgent_reply},
+        ]
+        account_data.setdefault("chat_history", []).append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user": message,
+            "assistant": urgent_reply,
+        })
+        account_data["chat_history"] = account_data["chat_history"][-100:]
+        saved, save_status = account_store.save_user_memory(session, account_data)
+        return updated_history, "", account_data, save_status if saved else "Safety response shown; saving needs attention: " + save_status, session
 
     emotion = detect_emotion(message)
     state = account_data.get("emotional_state", {})
@@ -1445,18 +1488,19 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
         "subject": str(subject or "general learning")[:100],
         "learning_goal": str(learning_goal or "understand the topic")[:250],
     }
-    tutor_context = ""
-    if tutor_enabled:
+    tutor_context = build_student_safety_prompt(effective_age_group, support_mode)
+    if tutor_enabled and support_mode != "wellbeing":
         age_for_support = {
             "preschool": 4,
             "early_elementary": 7,
             "elementary": 10,
             "teen": 15,
             "adult": 20,
-        }.get(age_group, 10)
-        tutor_context = (
-            build_teaching_prompt(
-                age_group=age_group,
+        }.get(effective_age_group, 10)
+        tutor_context += (
+            "\n\n"
+            + build_teaching_prompt(
+                age_group=effective_age_group,
                 subject=subject,
                 learning_goal=learning_goal,
             )
@@ -1473,9 +1517,11 @@ def chat_with_xemex(message, history, session, account_data, tutor_enabled=False
         ))
     )
 
-    if coding_request:
+    if coding_request and effective_age_group == "adult":
         task = message[5:].strip() if lower_message.startswith("/code") else message
         reply = generate_code(task or message)
+    elif coding_request:
+        reply = "I can help you understand and learn coding step by step, but the advanced code-generation tool is only available in adult mode. Tell me what you are trying to learn and we can work through it together."
     else:
         system_message = (
             f"{system_prompt}\n\n"
@@ -1615,6 +1661,11 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
             independent_student_practice_button = gr.Button("Start practice", variant="primary")
             independent_student_hint_button = gr.Button("Get a hint")
         independent_student_activity_status = gr.Markdown("Choose a topic to begin.")
+        independent_student_support_mode = gr.Radio(
+            choices=[("Tutor", "tutor"), ("Wellbeing companion", "wellbeing")],
+            value="tutor",
+            label="How can XEMEX help?",
+        )
         independent_student_chatbot = gr.Chatbot(label="Your learning conversation")
         independent_student_message = gr.Textbox(label="Talk with XEMEX", placeholder="Ask a question or tell XEMEX what you are learning.")
         with gr.Row():
@@ -1652,6 +1703,8 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                 lesson_button = gr.Button("Create an interactive lesson")
                 gr.Markdown("### Learner profiles")
                 learner_name_input = gr.Textbox(label="New learner name or nickname", placeholder="For example: Student 1")
+                learner_creation_age = gr.Number(label="Learner age (years)", precision=0, minimum=0, maximum=120)
+                gr.Markdown("Under-13 profiles require a verified parental-consent process, which is not yet integrated. Adult learners must create their own account.")
                 create_learner_button = gr.Button("Create learner profile")
                 learner_profile = gr.Dropdown(label="Active learner profile", choices=[], value=None)
                 learner_profile_status = gr.Markdown("Create a profile for each child or teen. Profiles and progress are private to this account.")
@@ -1712,7 +1765,12 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                 student_hint_button = gr.Button("Get a hint")
             student_activity_status = gr.Markdown("Choose your learner profile in Parent view before starting.")
             chatbot = gr.Chatbot(label="Your learning conversation")
-            message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
+            support_mode = gr.Radio(
+            choices=[("Tutor", "tutor"), ("Wellbeing companion", "wellbeing")],
+            value="tutor",
+            label="How can XEMEX help?",
+        )
+        message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
             with gr.Row():
                 send_button = gr.Button("Send", variant="primary")
                 clear = gr.Button("Clear conversation")
@@ -1799,7 +1857,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         inputs=[learner_profile, student_password_reset_input, session_state, parent_access_state],
         outputs=[student_login_management_status, session_state],
     )
-    chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal, student_access_state, student_profile]
+    chat_inputs = [message, chatbot, session_state, account_memory_state, tutor_mode, learner_age_group, learner_subject, learner_goal, student_access_state, student_profile, support_mode]
     chat_outputs = [chatbot, message, account_memory_state, account_status, session_state]
     message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
     send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
@@ -1847,7 +1905,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     create_learner_button.click(
         create_learner_profile,
-        inputs=[learner_name_input, learner_age_group, session_state, account_memory_state],
+        inputs=[learner_name_input, learner_creation_age, session_state, account_memory_state],
         outputs=[account_memory_state, learner_profile, learner_profile_status, session_state],
     )
     learner_profile.change(
@@ -1872,12 +1930,12 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     clear.click(lambda: ([], ""), outputs=[chatbot, message])
     independent_student_message.submit(
         independent_student_chat,
-        inputs=[independent_student_message, independent_student_chatbot, independent_student_state, independent_student_memory_state],
+        inputs=[independent_student_message, independent_student_chatbot, independent_student_state, independent_student_memory_state, independent_student_support_mode],
         outputs=[independent_student_chatbot, independent_student_message, independent_student_memory_state, independent_student_status],
     )
     independent_student_send_button.click(
         independent_student_chat,
-        inputs=[independent_student_message, independent_student_chatbot, independent_student_state, independent_student_memory_state],
+        inputs=[independent_student_message, independent_student_chatbot, independent_student_state, independent_student_memory_state, independent_student_support_mode],
         outputs=[independent_student_chatbot, independent_student_message, independent_student_memory_state, independent_student_status],
     )
     independent_student_practice_button.click(
