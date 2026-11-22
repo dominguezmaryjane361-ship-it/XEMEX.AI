@@ -772,9 +772,9 @@ with gr.Blocks(title="XEMEX.AI") as app:
     chatbot = gr.Chatbot(
     type="messages",
     label="Conversation"
-)
+  
     )
-
+    
     message = gr.Textbox(
         placeholder="Talk to XEMEX...",
         label="Your message"
