@@ -1966,7 +1966,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     sign_in_button.click(
         sign_in_account,
         inputs=[email_input, password_input],
-        outputs=auth_outputs + [student_self_status],
+        outputs=auth_outputs,
     ).then(
         restore_self_learner,
         inputs=[session_state, account_memory_state],
@@ -1998,7 +1998,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     student_self_signin_button.click(
         sign_in_self_student_account,
         inputs=[student_self_email, student_self_password],
-        outputs=auth_outputs,
+        outputs=auth_outputs + [student_self_status],
     ).then(
         restore_self_learner,
         inputs=[session_state, account_memory_state],
