@@ -33,6 +33,7 @@ from learning_support import (
 
 import requests
 import gradio as gr
+import account_memory as account_store
 
 
 # Optional web search
@@ -542,8 +543,10 @@ def think_independently(topic=None):
 # =========================================================
 
 def reflect_on_experience():
+    # Shared background reflection may inspect XEMEX's public explorations,
+    # but must never read account conversations or private account memories.
     with memory_lock:
-        recent_chats = memory["chat_history"][-12:]
+        recent_chats = []
         recent_thoughts = memory["thoughts"][-5:]
 
     messages = [
@@ -626,44 +629,97 @@ def generate_code(task):
 # 11. CHAT
 # =========================================================
 
-def chat_with_xemex(message, history):
-    message = (message or "").strip()
-    if not message:
-        return history or [], ""
-
-    # Gradio Chatbot(type="messages") uses role/content dictionaries.
-    safe_history = []
-    for item in (history or [])[-10:]:
-        if not isinstance(item, dict):
+def _restore_account_chat(account_data):
+    restored = []
+    for turn in (account_data or {}).get("chat_history", [])[-25:]:
+        if not isinstance(turn, dict):
             continue
-        role = item.get("role")
-        content = item.get("content")
-        if role in ("user", "assistant") and isinstance(content, str):
-            safe_history.append({"role": role, "content": content})
+        user_text = turn.get("user")
+        assistant_text = turn.get("assistant")
+        if isinstance(user_text, str):
+            restored.append({"role": "user", "content": user_text})
+        if isinstance(assistant_text, str):
+            restored.append({"role": "assistant", "content": assistant_text})
+    return restored
+
+
+def _authenticate_account(email, password, create_account=False):
+    if create_account:
+        session, status = account_store.sign_up(email, password)
+    else:
+        session, status = account_store.sign_in(email, password)
+
+    if not session:
+        return None, account_store.default_user_memory(), [], status, gr.update(visible=True), gr.update(visible=False)
+
+    account_data, memory_status = account_store.load_user_memory(session)
+    restored = _restore_account_chat(account_data)
+    return session, account_data, restored, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True)
+
+
+def sign_in_account(email, password):
+    return _authenticate_account(email, password, False)
+
+
+def create_account(email, password):
+    return _authenticate_account(email, password, True)
+
+
+def sign_out_account(session):
+    account_store.sign_out(session)
+    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", gr.update(visible=True), gr.update(visible=False)
+
+
+def chat_with_xemex(message, history, session, account_data):
+    message = (message or "").strip()
+    history = history or []
+    if not message:
+        return history, "", account_data, ""
+
+    if not isinstance(session, dict) or not session.get("access_token") or not session.get("user_id"):
+        return history, "", account_data, "Please sign in before chatting."
+
+    # All personal context below is scoped to the authenticated account.
+    if not isinstance(account_data, dict):
+        account_data = account_store.default_user_memory()
+
+    safe_history = []
+    for item in history[-20:]:
+        if isinstance(item, dict):
+            role, content = item.get("role"), item.get("content")
+            if role in ("user", "assistant") and isinstance(content, str):
+                safe_history.append({"role": role, "content": content})
 
     emotion = detect_emotion(message)
-    update_emotional_state(emotion)
+    state = account_data.get("emotional_state", {})
+    changes = {
+        "joy": {"pleasure": 0.10, "trust": 0.03, "humor_warmth": 0.05},
+        "sadness": {"pleasure": -0.10, "attachment": 0.03},
+        "anger": {"pleasure": -0.10, "arousal": 0.10},
+        "fear": {"arousal": 0.10, "attachment": 0.03},
+        "surprise": {"arousal": 0.08, "humor_warmth": 0.03},
+        "disgust": {"pleasure": -0.08},
+    }
+    for key, change in changes.get(emotion, {}).items():
+        state[key] = clamp(state.get(key, 0.0) + change)
+    account_data["emotional_state"] = state
+    account_data["interaction_count"] = int(account_data.get("interaction_count", 0)) + 1
+
+    # Remember a name only in the signed-in account's private profile.
+    import re
+    name_match = re.search(r"\\bmy name is\\s+([A-Za-z][A-Za-z' -]{0,98})", message, re.IGNORECASE)
+    if name_match:
+        account_data.setdefault("profile", {})["name"] = name_match.group(1).strip().rstrip(" .,!")
+
+    profile_name = account_data.get("profile", {}).get("name", "")
+    facts = account_data.get("facts", [])
+    known_facts = "\\n".join("- " + str(item) for item in facts[-12:]) or "No saved facts yet."
+    if profile_name:
+        known_facts = "- The user's name is " + profile_name + "\\n" + known_facts
 
     with memory_lock:
-        memory["interaction_count"] += 1
         system_prompt = memory["system_prompt"]
-        state_snapshot = dict(memory["emotional_state"])
-        known_facts = (
-            "\n".join(f"- {fact}" for fact in memory["core_facts"][-12:])
-            or "No saved facts yet."
-        )
-        discoveries = (
-            "\n".join(str(item) for item in memory["learned_knowledge"][-5:])
-            or "No independent explorations yet."
-        )
-        reflections = (
-            "\n".join(
-                str(item.get("reflection", ""))
-                for item in memory["private_journal"][-3:]
-                if isinstance(item, dict)
-            )
-            or "No reflections yet."
-        )
+        discoveries = "\\n".join(str(item) for item in memory["learned_knowledge"][-5:]) or "No independent explorations yet."
 
     lower_message = message.lower()
     coding_request = (
@@ -679,23 +735,18 @@ def chat_with_xemex(message, history):
         reply = generate_code(task or message)
     else:
         system_message = (
-            f"{system_prompt}\n\n"
-            f"Behavioral state (simulated): {json.dumps(state_snapshot)}\n\n"
-            f"Detected user-message emotion: {emotion}\n\n"
-            f"Remembered facts:\n{known_facts}\n\n"
-"IDENTITY ACCURACY:\n"
-"You are XEMEX.AI, running inside a Python application.\n"
-"Your capabilities depend on the tools and services actually connected.\n"
-"You have persistent memory only when memory storage is available "
-"and information has been successfully saved.\n"
-"You can use web search only when the search tool is available.\n"
-"Never claim a fixed training cutoff unless it is verified.\n"
-"Never describe yourself as having no memory or tools when they "
-"are actually available to this application.\n\n"
-            f"Recent discoveries:\n{discoveries}\n\n"
-            f"Recent reflections:\n{reflections}\n\n"
-            "Use this context when relevant. Do not pretend to remember "
-            "information that is not supplied here."
+            f"{system_prompt}\\n\\n"
+            f"Behavioral state (simulated, account-specific): {json.dumps(state)}\\n\\n"
+            f"Detected user-message emotion: {emotion}\\n\\n"
+            f"Remembered facts for this account only:\\n{known_facts}\\n\\n"
+            "IDENTITY ACCURACY:\\n"
+            "You are XEMEX.AI, running inside a Python application.\\n"
+            "Your capabilities depend on the tools and services actually connected.\\n"
+            "Never claim a fixed training cutoff unless it is verified.\\n"
+            "Never claim to remember information that is not supplied here.\\n\\n"
+            f"Recent general XEMEX explorations:\\n{discoveries}\\n\\n"
+            "Do not reveal or infer information from another account. "
+            "Use only the current account's supplied context for personal details."
         )
         messages = [{"role": "system", "content": system_message}]
         messages.extend(safe_history)
@@ -710,19 +761,17 @@ def chat_with_xemex(message, history):
     if not reply.startswith((
         "Groq returned HTTP", "I couldn't reach", "XEMEX is not connected"
     )):
-        with memory_lock:
-            memory["chat_history"].append({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "user": message,
-                "assistant": reply,
-            })
-            memory["chat_history"] = memory["chat_history"][-50:]
+        account_data.setdefault("chat_history", []).append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user": message,
+            "assistant": reply,
+        })
+        account_data["chat_history"] = account_data["chat_history"][-100:]
 
-    # Save interaction count and chat history even if the API returned an error.
-    with memory_lock:
-        save_memory(memory)
-
-    return updated_history, ""
+    saved, save_status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        save_status = "Warning: " + save_status
+    return updated_history, "", account_data, save_status
 
 
 # =========================================================
@@ -767,28 +816,55 @@ def start_heartbeat_once():
 
 with gr.Blocks(title="XEMEX.AI") as app:
     gr.Markdown("# XEMEX.AI")
-    gr.Markdown("Persistent Identity AI")
+    gr.Markdown("Your personal AI assistant and learning companion.")
 
-    chatbot = gr.Chatbot(
-    label="Conversation"
-)
-    
-    message = gr.Textbox(
-        placeholder="Talk to XEMEX...",
-        label="Your message"
+    session_state = gr.State(value=None)
+    account_memory_state = gr.State(value=account_store.default_user_memory())
+
+    with gr.Column(visible=True) as login_panel:
+        gr.Markdown("## Sign in or create an account")
+        email_input = gr.Textbox(label="Email", placeholder="you@example.com")
+        password_input = gr.Textbox(label="Password", type="password")
+        with gr.Row():
+            sign_in_button = gr.Button("Sign in", variant="primary")
+            create_account_button = gr.Button("Create account")
+        auth_status = gr.Markdown("Each account has its own private saved memory.")
+
+    with gr.Column(visible=False) as chat_panel:
+        account_status = gr.Markdown("Signed in.")
+        chatbot = gr.Chatbot(label="Conversation", type="messages")
+        message = gr.Textbox(placeholder="Talk to XEMEX...", label="Your message")
+        with gr.Row():
+            send_button = gr.Button("Send", variant="primary")
+            clear = gr.Button("Clear conversation")
+            sign_out_button = gr.Button("Sign out")
+
+    auth_outputs = [
+        session_state, account_memory_state, chatbot,
+        account_status, login_panel, chat_panel
+    ]
+    sign_in_button.click(
+        sign_in_account,
+        inputs=[email_input, password_input],
+        outputs=auth_outputs,
+    )
+    create_account_button.click(
+        create_account,
+        inputs=[email_input, password_input],
+        outputs=auth_outputs,
     )
 
-    clear = gr.Button("Clear conversation")
+    chat_inputs = [message, chatbot, session_state, account_memory_state]
+    chat_outputs = [chatbot, message, account_memory_state, account_status]
+    message.submit(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
+    send_button.click(chat_with_xemex, inputs=chat_inputs, outputs=chat_outputs)
 
-    message.submit(
-        chat_with_xemex,
-        inputs=[message, chatbot],
-        outputs=[chatbot, message]
-    )
+    clear.click(lambda: ([], ""), outputs=[chatbot, message])
 
-    clear.click(
-        lambda: ([], ""),
-        outputs=[chatbot, message]
+    sign_out_button.click(
+        sign_out_account,
+        inputs=[session_state],
+        outputs=auth_outputs,
     )
 
 
