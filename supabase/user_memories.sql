@@ -11,6 +11,21 @@ ALTER TABLE public.user_memories
 ALTER TABLE public.user_memories
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
+DO $
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.user_memories'::regclass
+          AND confrelid = 'auth.users'::regclass
+          AND contype = 'f'
+    ) THEN
+        ALTER TABLE public.user_memories
+            ADD CONSTRAINT user_memories_auth_user_fk
+            FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+    END IF;
+END
+$;
+
 ALTER TABLE public.user_memories ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.user_memories FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.user_memories TO authenticated;
