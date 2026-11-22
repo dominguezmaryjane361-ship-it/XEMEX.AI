@@ -25,7 +25,7 @@ class StudentAccountSecurityTests(unittest.TestCase):
 
     def test_session_is_signed_and_expires(self):
         original_secret = student_accounts.SESSION_SECRET
-        student_accounts.SESSION_SECRET = b"test-only-session-secret"
+        student_accounts.SESSION_SECRET = b"test-only-session-secret-32-bytes!!"
         try:
             record = {
                 "id": "student-id",
