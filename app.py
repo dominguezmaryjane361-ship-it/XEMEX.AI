@@ -679,8 +679,61 @@ def sign_in_account(email, password):
     return _authenticate_account(email, password, False)
 
 
-def create_account(email, password):
-    return _authenticate_account(email, password, True)
+def _age_group_for_years(age):
+    if age < 6:
+        return "preschool"
+    if age <= 8:
+        return "early_elementary"
+    if age <= 12:
+        return "elementary"
+    if age <= 17:
+        return "teen"
+    return "adult"
+
+
+def create_account(email, password, setup_for, learner_age, adult_consent):
+    setup_for = str(setup_for or "").strip().lower()
+    try:
+        age = int(learner_age)
+    except (TypeError, ValueError):
+        return None, account_store.default_user_memory(), [], "Enter the learner's age in years.", "Enter the learner's age in years.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+    if age < 3 or age > 120:
+        message = "Enter an age from 3 to 120."
+        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+    if setup_for not in ("self", "child"):
+        message = "Choose whether XEMEX is being set up for yourself or a child."
+        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+    if setup_for == "self" and age < 13:
+        message = "Anyone under 13 must have a parent or guardian set up XEMEX."
+        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+    if setup_for == "child" and age >= 18 and adult_consent is not True:
+        message = "For an adult learner, confirm that they agree to this setup and any parent access."
+        return None, account_store.default_user_memory(), [], message, message, gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
+
+    result = _authenticate_account(email, password, True)
+    session = result[0]
+    if not session:
+        return result
+    account_data, memory_status = account_store.load_user_memory(session)
+    account_data["registration_setup"] = {
+        "setup_for": setup_for,
+        "learner_age": age,
+        "age_group": _age_group_for_years(age),
+        "adult_learner_consent": bool(adult_consent) if age >= 18 else False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    saved, save_status = account_store.save_user_memory(session, account_data)
+    if not saved:
+        warning = "Account created, but setup preferences could not be saved. " + save_status
+        result = list(result)
+        result[3] = warning
+        result[4] = warning
+        return tuple(result)
+    result = list(result)
+    result[1] = account_data
+    result[3] = "Account created. " + save_status
+    result[4] = result[3]
+    return tuple(result)
 
 
 def sign_out_account(session):
@@ -1468,13 +1521,25 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
         )
 
         with gr.Column(visible=False) as parent_login_fields:
-            gr.Markdown("### Parent sign-in")
-            email_input = gr.Textbox(label="Parent email", placeholder="you@example.com")
+            gr.Markdown("### Account sign-in")
+            email_input = gr.Textbox(label="Email", placeholder="you@example.com")
             password_input = gr.Textbox(label="Password", type="password")
             with gr.Row():
                 sign_in_button = gr.Button("Sign in", variant="primary")
-                create_account_button = gr.Button("Create parent account")
-            auth_status = gr.Markdown("Your parent account has its own private saved memory.")
+            gr.Markdown("### Create a XEMEX account")
+            registration_setup_for = gr.Radio(
+                choices=[("For myself", "self"), ("For my child", "child")],
+                value=None,
+                label="Who are you setting up XEMEX for?",
+            )
+            registration_age = gr.Number(label="How old is the learner? (years)", precision=0, minimum=3, maximum=120)
+            registration_adult_consent = gr.Checkbox(
+                label="The adult learner agrees to this setup and explicitly chooses whether to share account information with the parent.",
+                value=False,
+                visible=True,
+            )
+            create_account_button = gr.Button("Create account", variant="primary")
+            auth_status = gr.Markdown("Use your email and password to sign in, or complete the setup questions to create an account.")
             parent_back_button = gr.Button("Back")
 
         with gr.Column(visible=False) as student_login_fields:
@@ -1630,7 +1695,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
     )
     create_account_button.click(
         create_account,
-        inputs=[email_input, password_input],
+        inputs=[email_input, password_input, registration_setup_for, registration_age, registration_adult_consent],
         outputs=auth_outputs,
     )
 
