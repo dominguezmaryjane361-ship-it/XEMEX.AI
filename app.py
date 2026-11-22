@@ -920,8 +920,6 @@ def independent_student_chat(message, history, student_session, student_memory, 
     controls, control_status = student_accounts.get_student_parent_controls(student_session)
     if not controls:
         return history, "", student_memory, control_status
-    if not controls.get("allow_chat", True):
-        return history, "", student_memory, "A parent has paused chat for this learner. Please speak with your parent or guardian."
     memory = student_memory if isinstance(student_memory, dict) else {}
     profile = memory.get("profile") if isinstance(memory.get("profile"), dict) else {}
     age_group = str(profile.get("age_group", "elementary"))[:40]
@@ -940,6 +938,9 @@ def independent_student_chat(message, history, student_session, student_memory, 
         memory["interaction_count"] = int(memory.get("interaction_count", 0)) + 1
         saved, status = student_accounts.save_student_memory(student_session, memory)
         return updated_history, "", memory, status if saved else "Safety response shown; saving needs attention: " + status
+
+    if not controls.get("allow_chat", True):
+        return history, "", memory, "A parent has paused chat for this learner. Please speak with your parent or guardian."
 
     prompt = build_student_safety_prompt(age_group, support_mode)
     reply = ask_llm([{"role": "system", "content": prompt}] + safe_history + [
@@ -1873,7 +1874,7 @@ with gr.Blocks(title="XEMEX.AI", theme=gr.themes.Soft(primary_hue="blue", second
                     label="Daily learning activity limit",
                 )
                 save_parent_controls_button = gr.Button("Save parent safety settings")
-                parent_controls_status = gr.Markdown("Settings apply to the selected learner's practice and hint activities.")
+                parent_controls_status = gr.Markdown("Settings apply to the selected learner's chat, practice, and hint activities.")
                 gr.Markdown("### Student sign-in PIN")
                 parent_pin_input = gr.Textbox(label="Create a six-digit student PIN", type="password", max_lines=1)
                 parent_pin_confirm = gr.Textbox(label="Confirm student PIN", type="password", max_lines=1)
