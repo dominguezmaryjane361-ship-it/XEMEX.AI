@@ -650,11 +650,11 @@ def _authenticate_account(email, password, create_account=False):
         session, status = account_store.sign_in(email, password)
 
     if not session:
-        return None, account_store.default_user_memory(), [], status, gr.update(visible=True), gr.update(visible=False)
+        return None, account_store.default_user_memory(), [], status, status, gr.update(visible=True), gr.update(visible=False)
 
     account_data, memory_status = account_store.load_user_memory(session)
     restored = _restore_account_chat(account_data)
-    return session, account_data, restored, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True)
+    return session, account_data, restored, status + " " + memory_status, status + " " + memory_status, gr.update(visible=False), gr.update(visible=True)
 
 
 def sign_in_account(email, password):
@@ -667,7 +667,7 @@ def create_account(email, password):
 
 def sign_out_account(session):
     account_store.sign_out(session)
-    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", gr.update(visible=True), gr.update(visible=False)
+    return None, account_store.default_user_memory(), [], "Signed out. Your saved account memory remains private.", "Signed out.", gr.update(visible=True), gr.update(visible=False)
 
 
 def chat_with_xemex(message, history, session, account_data):
