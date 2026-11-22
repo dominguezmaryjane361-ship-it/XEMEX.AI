@@ -14,6 +14,7 @@ ALTER TABLE public.user_memories
 ALTER TABLE public.user_memories ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.user_memories FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.user_memories TO authenticated;
+GRANT ALL ON TABLE public.user_memories TO service_role;
 
 -- Remove pre-existing policies first: permissive RLS policies are ORed together.
 DO $
