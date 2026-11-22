@@ -1169,7 +1169,8 @@ def build_parent_dashboard(session, account_data, learner_id=None):
     lines.extend([
         "",
         "_This dashboard reports lessons and observations entered by a parent or tutor. "
-        "Student practice and hint records are shown separately from parent/tutor observations. "\n        "It does not independently test a learner or diagnose a learning condition._",
+        "Student practice and hint records are shown separately from parent/tutor observations. "
+        "It does not independently test a learner or diagnose a learning condition._",
     ])
     return "\n".join(lines), session
 
