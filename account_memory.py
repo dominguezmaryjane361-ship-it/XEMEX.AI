@@ -256,10 +256,32 @@ def _normalize_memory(data):
                 allow_hints = True
             if daily_limit not in (0, 5, 10, 15, 20, 30):
                 daily_limit = 20
+            pin_record = learner.get("student_pin")
+            if not isinstance(pin_record, dict):
+                pin_record = None
+            else:
+                salt = pin_record.get("salt")
+                digest = pin_record.get("hash")
+                iterations = pin_record.get("iterations", 240000)
+                if (not isinstance(salt, str) or len(salt) != 32
+                        or not isinstance(digest, str) or len(digest) != 64
+                        or not isinstance(iterations, int) or iterations < 100000 or iterations > 500000):
+                    pin_record = None
+                else:
+                    pin_record = {"salt": salt, "hash": digest, "iterations": iterations}
+            attempts = learner.get("pin_failed_attempts", 0)
+            if not isinstance(attempts, int) or attempts < 0:
+                attempts = 0
+            locked_until = learner.get("pin_locked_until", 0)
+            if not isinstance(locked_until, (int, float)):
+                locked_until = 0
             cleaned_learners.append({
                 "id": learner_id,
                 "name": learner_name,
                 "age_group": age_group,
+                "student_pin": pin_record,
+                "pin_failed_attempts": min(attempts, 5),
+                "pin_locked_until": max(0, float(locked_until)),
                 "parent_controls": {
                     "allow_practice": allow_practice,
                     "allow_hints": allow_hints,
