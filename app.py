@@ -683,7 +683,7 @@ def sign_out_account(session):
 
 def sign_out_account_and_lock_student(session):
     outputs = sign_out_account(session)
-    return (*outputs, None)
+    return (*outputs, None, None)
 
 
 def _parent_control_status(account_data, learner_id, activity_type):
@@ -1522,7 +1522,7 @@ with gr.Blocks(title="XEMEX.AI") as app:
     sign_out_button.click(
         sign_out_account_and_lock_student,
         inputs=[session_state],
-        outputs=auth_outputs + [student_access_state],
+        outputs=auth_outputs + [student_access_state, parent_access_state],
     )
 
 
