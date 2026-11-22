@@ -709,7 +709,10 @@ def _age_group_for_years(age):
 def create_account(email, password, setup_for, learner_age, learner_name):
     setup_for = str(setup_for or "").strip().lower()
     try:
-        age = int(learner_age)
+        numeric_age = float(learner_age)
+        if not numeric_age.is_integer():
+            raise ValueError("Age must be a whole number.")
+        age = int(numeric_age)
     except (TypeError, ValueError):
         return None, account_store.default_user_memory(), [], "Enter the learner's age in years.", "Enter the learner's age in years.", gr.update(visible=True), gr.update(visible=False), "elementary", "General learning", "Understand the topic", gr.update(choices=[], value=None)
     if age < 0 or age > 120:
